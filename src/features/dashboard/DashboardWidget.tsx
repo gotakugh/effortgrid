@@ -14,6 +14,7 @@ import {
   ActionIcon,
   Tooltip as MantineTooltip,
   Select,
+  SimpleGrid,
 } from '@mantine/core';
 import {
   ResponsiveContainer,
