@@ -95,12 +95,12 @@ function App() {
 
   const projectForm = useForm({
     initialValues: { name: '' },
-    validate: zodResolver(createProjectSchema),
+    validate: zodResolver(createProjectSchema as any),
   });
 
   const baselineForm = useForm({
     initialValues: { name: '' },
-    validate: zodResolver(createBaselineSchema),
+    validate: zodResolver(createBaselineSchema as any),
   });
 
   const handleCreateProject = async (values: { name: string }) => {

@@ -209,7 +209,7 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
       title: '',
       elementType: 'Activity' as WbsElementType,
     },
-    validate: zodResolver(addElementSchema),
+    validate: zodResolver(addElementSchema as any),
   });
 
   const handleOpenAddModal = (parent: WbsElementDetail | null) => {
