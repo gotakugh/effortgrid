@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, Fragment } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Group, Title, Text, Table, NumberInput, Badge, Box, Loader, Center, Alert, Stack, ActionIcon,
@@ -26,12 +26,12 @@ interface GridProps {
 const getBadgeColor = (type: WbsElementType) => ({ Project: 'blue', WorkPackage: 'cyan', Activity: 'teal' }[type] || 'gray');
 
 // --- Sub-components ---
-const AcInputCell = ({ wbsElementId, date, initialAc, onCommit, isReadOnly, onKeyDown, onPaste, onMouseDown, onMouseOver, isSelected }: {
-  wbsElementId: number; date: string; initialAc?: number; isReadOnly: boolean;
+const AcInputCell = ({ wbsElementId, date, pv, initialAc, onCommit, isReadOnly, onKeyDown, onPaste, onMouseDown, onMouseOver, isSelected }: {
+  wbsElementId: number; date: string; pv?: number; initialAc?: number; isReadOnly: boolean;
   onCommit: (value: number | null) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
   onPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
-  onMouseDown: (e: React.MouseEvent<HTMLInputElement>) => void;
+  onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
   onMouseOver: () => void;
   isSelected: boolean;
 }) => {
@@ -45,28 +45,45 @@ const AcInputCell = ({ wbsElementId, date, initialAc, onCommit, isReadOnly, onKe
   };
 
   return (
-    <NumberInput
-      id={`cell-ac-${wbsElementId}-${date}`}
-      classNames={{ input: classes.ac_input }}
-      style={{
-        backgroundColor: isSelected ? 'var(--mantine-color-blue-light)' : 'transparent',
-        height: '100%',
-      }}
-      styles={{
-        wrapper: { height: '100%' },
-        input: { height: '100%', cursor: 'cell', textAlign: 'right', paddingRight: 'var(--mantine-spacing-xs)' }
-      }}
-      value={value}
-      onChange={setValue}
-      onBlur={handleBlur}
-      onKeyDown={(e) => onKeyDown(e, wbsElementId, date)}
-      onPaste={(e) => onPaste(e, wbsElementId, date)}
-      onMouseDown={onMouseDown}
-      onMouseOver={onMouseOver}
-      step={0.1} min={0} hideControls
-      readOnly={isReadOnly}
-      variant="unstyled"
-    />
+    <Stack gap={0} justify="stretch" style={{ height: '100%', cursor: 'cell' }} onMouseDown={onMouseDown} onMouseOver={onMouseOver}>
+      <Box
+        style={{
+          flex: 1,
+          padding: '2px 4px',
+          backgroundColor: isSelected ? 'var(--mantine-color-blue-light-hover)' : 'var(--mantine-color-gray-0)',
+          borderBottom: '1px solid var(--mantine-color-gray-2)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+        }}
+      >
+        <Text size="xs" c="dimmed">
+          PV: {pv != null ? pv.toFixed(1) : '-'}
+        </Text>
+      </Box>
+      <NumberInput
+        id={`cell-ac-${wbsElementId}-${date}`}
+        classNames={{ input: classes.ac_input }}
+        styles={{
+          wrapper: { flex: 1, display: 'flex' },
+          input: { 
+            height: '100%', 
+            flex: 1,
+            backgroundColor: isSelected ? 'var(--mantine-color-blue-light)' : 'transparent',
+            textAlign: 'right',
+            paddingRight: 'var(--mantine-spacing-xs)',
+          }
+        }}
+        value={value}
+        onChange={setValue}
+        onBlur={handleBlur}
+        onKeyDown={(e) => onKeyDown(e, wbsElementId, date)}
+        onPaste={(e) => onPaste(e, wbsElementId, date)}
+        step={0.1} min={0} hideControls
+        readOnly={isReadOnly}
+        variant="unstyled"
+      />
+    </Stack>
   );
 };
 
@@ -76,7 +93,7 @@ const GridRow = ({ node, level, days, data, allElements, onAcChange, isReadOnly,
   isReadOnly: boolean;
   onCellKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
   onCellPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
-  onCellMouseDown: (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
+  onCellMouseDown: (e: React.MouseEvent<HTMLDivElement>, wbsElementId: number, date: string) => void;
   onCellMouseOver: (wbsElementId: number, date: string) => void;
   selectedCells: Set<string>;
 }) => {
@@ -114,37 +131,31 @@ const GridRow = ({ node, level, days, data, allElements, onAcChange, isReadOnly,
           const dateStr = day.format('YYYY-MM-DD');
           const cellId = `cell-ac-${node.wbsElementId}-${dateStr}`;
           return (
-            <Fragment key={dateStr}>
-              <Table.Td className={classes.data_cell} style={{textAlign: 'right'}}>
-                {isActivity
-                  ? (data[node.wbsElementId]?.[dateStr]?.pv != null ? data[node.wbsElementId]?.[dateStr]?.pv?.toFixed(1) : '-')
-                  : (getRollupValue(dateStr, 'pv') > 0 ? getRollupValue(dateStr, 'pv').toFixed(1) : '-')
-                }
-              </Table.Td>
-              <Table.Td className={classes.data_cell} style={isActivity ? { padding: 0, borderRight: '1px solid var(--mantine-color-gray-3)' } : { borderRight: '1px solid var(--mantine-color-gray-3)', textAlign: 'right' }}>
-                {isActivity ? (
-                  <AcInputCell
-                    wbsElementId={node.wbsElementId} date={dateStr}
-                    initialAc={data[node.wbsElementId]?.[dateStr]?.ac?.value}
-                    onCommit={(value) => onAcChange(node.wbsElementId, dateStr, value)}
-                    isReadOnly={isReadOnly}
-                    onKeyDown={onCellKeyDown} onPaste={onCellPaste}
-                    onMouseDown={(e) => onCellMouseDown(e, node.wbsElementId, dateStr)}
-                    onMouseOver={() => onCellMouseOver(node.wbsElementId, dateStr)}
-                    isSelected={selectedCells.has(cellId)}
-                  />
-                ) : (
-                    getRollupValue(dateStr, 'ac') > 0 ? getRollupValue(dateStr, 'ac').toFixed(1) : '-'
-                )}
-              </Table.Td>
-            </Fragment>
+            <Table.Td key={dateStr} className={classes.data_cell} style={isActivity ? { padding: 0 } : {}}>
+              {isActivity ? (
+                <AcInputCell
+                  wbsElementId={node.wbsElementId} date={dateStr}
+                  pv={data[node.wbsElementId]?.[dateStr]?.pv}
+                  initialAc={data[node.wbsElementId]?.[dateStr]?.ac?.value}
+                  onCommit={(value) => onAcChange(node.wbsElementId, dateStr, value)}
+                  isReadOnly={isReadOnly}
+                  onKeyDown={onCellKeyDown} onPaste={onCellPaste}
+                  onMouseDown={(e) => onCellMouseDown(e, node.wbsElementId, dateStr)}
+                  onMouseOver={() => onCellMouseOver(node.wbsElementId, dateStr)}
+                  isSelected={selectedCells.has(cellId)}
+                />
+              ) : (
+                <div className={classes.rollup_cell}>
+                  <Text size="xs" c="dimmed">PV: {getRollupValue(dateStr, 'pv') > 0 ? getRollupValue(dateStr, 'pv').toFixed(1) : '-'}</Text>
+                  <Text size="sm" fw={500}>AC: {getRollupValue(dateStr, 'ac') > 0 ? getRollupValue(dateStr, 'ac').toFixed(1) : '-'}</Text>
+                </div>
+              )}
+            </Table.Td>
           );
         })}
-        <Table.Td className={classes.summary_col} style={{ ...tdStyle, textAlign: 'right' }}>
-          {totalPvForMonth > 0 ? totalPvForMonth.toFixed(1) : '-'}
-        </Table.Td>
-        <Table.Td className={classes.summary_col} style={{ ...tdStyle, textAlign: 'right' }}>
-          {totalAcForMonth > 0 ? totalAcForMonth.toFixed(1) : '-'}
+        <Table.Td className={classes.summary_col} style={tdStyle}>
+          <Text size="xs" c="dimmed">PV: {totalPvForMonth.toFixed(1)}</Text>
+          <Text size="sm" fw={500}>AC: {totalAcForMonth.toFixed(1)}</Text>
         </Table.Td>
       </Table.Tr>
       {node.children.map((child) => <GridRow key={child.id} node={child} level={level + 1} days={days} data={data} allElements={allElements} onAcChange={onAcChange} isReadOnly={isReadOnly} onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste} onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver} selectedCells={selectedCells} />)}
@@ -453,26 +464,16 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
           <Table className={classes.table} withColumnBorders>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th rowSpan={2} className={classes.sticky_col_header}>WBS Element</Table.Th>
+                <Table.Th className={classes.sticky_col_header}>WBS Element</Table.Th>
                 {daysInMonth.map((day) => {
                   const isWeekend = day.day() === 0 || day.day() === 6;
                   return (
-                    <Table.Th colSpan={2} key={day.format('YYYY-MM-DD')} className={`${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`} style={{textAlign: 'center', borderRight: '1px solid var(--mantine-color-gray-3)'}}>
+                    <Table.Th key={day.format('YYYY-MM-DD')} className={`${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}>
                       <div>{day.format('ddd')}</div><div>{day.format('D')}</div>
                     </Table.Th>
                   );
                 })}
-                <Table.Th colSpan={2} style={{textAlign: 'center'}}>Month Totals</Table.Th>
-              </Table.Tr>
-              <Table.Tr>
-                {daysInMonth.map((day) => (
-                    <Fragment key={day.format('YYYY-MM-DD')}>
-                        <Table.Th style={{textAlign: 'right', fontWeight: 'normal', paddingTop: 2, paddingBottom: 2}}>P</Table.Th>
-                        <Table.Th style={{textAlign: 'right', fontWeight: 'normal', borderRight: '1px solid var(--mantine-color-gray-3)', paddingTop: 2, paddingBottom: 2}}>A</Table.Th>
-                    </Fragment>
-                ))}
-                <Table.Th style={{textAlign: 'right', fontWeight: 'normal', paddingTop: 2, paddingBottom: 2}}>P</Table.Th>
-                <Table.Th style={{textAlign: 'right', fontWeight: 'normal', paddingTop: 2, paddingBottom: 2}}>A</Table.Th>
+                <Table.Th>Month Totals</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
