@@ -1,8 +1,18 @@
 use crate::db::{self, DbResult, SqlitePool};
 use chrono::{Datelike, Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, QueryBuilder, Sqlite};
 use std::collections::BTreeMap;
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct EvmFilter {
+    pub plan_version_id: i64,
+    pub wbs_ids: Option<Vec<i64>>,
+    pub user_ids: Option<Vec<i64>>,
+    pub milestone_ids: Option<Vec<i64>>,
+    pub tags: Option<Vec<String>>,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
@@ -46,45 +56,63 @@ struct ProgressInfo {
     progress_percent: f64,
 }
 
-async fn get_filtered_activity_ids(
-    pool: &SqlitePool,
-    plan_version_id: i64,
-    target_wbs_id: Option<i64>,
-) -> DbResult<Vec<i64>> {
-    let wbs_ids_to_filter = if let Some(root_id) = target_wbs_id {
-        db::get_descendant_wbs_element_ids(pool, plan_version_id, root_id).await?
-    } else {
-        let all_ids: Vec<(i64,)> =
-            sqlx::query_as("SELECT wbs_element_id FROM wbs_element_details WHERE plan_version_id = ?")
-                .bind(plan_version_id)
-                .fetch_all(pool)
-                .await?;
-        all_ids.into_iter().map(|(id,)| id).collect()
-    };
+async fn get_filtered_activity_ids(pool: &SqlitePool, filter: &EvmFilter) -> DbResult<Vec<i64>> {
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(
+        "SELECT wbs_element_id FROM wbs_element_details WHERE plan_version_id = ",
+    );
+    qb.push_bind(filter.plan_version_id)
+        .push(" AND element_type = 'Activity' ");
 
-    let ids_json =
-        serde_json::to_string(&wbs_ids_to_filter).map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
-    let activity_ids: Vec<(i64,)> = sqlx::query_as(
-        "SELECT wbs_element_id FROM wbs_element_details WHERE plan_version_id = ? AND element_type = 'Activity' AND wbs_element_id IN (SELECT value FROM json_each(?))"
-    )
-    .bind(plan_version_id)
-    .bind(ids_json)
-    .fetch_all(pool)
-    .await?;
+    if let Some(wbs_ids) = filter.wbs_ids.as_ref().filter(|v| !v.is_empty()) {
+        let wbs_ids_json = serde_json::to_string(wbs_ids).unwrap();
+        qb.push(" AND wbs_element_id IN (WITH RECURSIVE descendants(id) AS (SELECT value as id FROM json_each(")
+            .push_bind(wbs_ids_json)
+            .push(") UNION SELECT wed.wbs_element_id FROM wbs_element_details wed JOIN descendants ON wed.parent_element_id = descendants.id WHERE wed.plan_version_id = ")
+            .push_bind(filter.plan_version_id)
+            .push(") SELECT id FROM descendants) ");
+    }
+    
+    if let Some(milestone_ids) = filter.milestone_ids.as_ref().filter(|v| !v.is_empty()) {
+        let milestone_ids_json = serde_json::to_string(milestone_ids).unwrap();
+        qb.push(" AND wbs_element_id IN (WITH RECURSIVE descendants(id) AS (SELECT wbs_element_id FROM wbs_element_details WHERE plan_version_id = ")
+            .push_bind(filter.plan_version_id)
+            .push(" AND milestone_id IN (SELECT value FROM json_each(")
+            .push_bind(milestone_ids_json)
+            .push(")) UNION SELECT wed.wbs_element_id FROM wbs_element_details wed JOIN descendants ON wed.parent_element_id = descendants.id WHERE wed.plan_version_id = ")
+            .push_bind(filter.plan_version_id)
+            .push(") SELECT id FROM descendants) ");
+    }
 
+    if let Some(user_ids) = filter.user_ids.as_ref().filter(|v| !v.is_empty()) {
+        let user_ids_json = serde_json::to_string(user_ids).unwrap();
+        qb.push(" AND EXISTS (SELECT 1 FROM pv_allocations pa WHERE pa.wbs_element_id = wbs_element_details.wbs_element_id AND pa.plan_version_id = ")
+            .push_bind(filter.plan_version_id)
+            .push(" AND pa.user_id IN (SELECT value FROM json_each(")
+            .push_bind(user_ids_json)
+            .push("))) ");
+    }
+    
+    if let Some(tags) = filter.tags.as_ref().filter(|v| !v.is_empty()) {
+        let tags_json = serde_json::to_string(tags).unwrap();
+        qb.push(" AND json_valid(tags) AND EXISTS (SELECT 1 FROM json_each(tags) WHERE value IN (SELECT value FROM json_each(")
+            .push_bind(tags_json)
+            .push("))) ");
+    }
+
+    let activity_ids: Vec<(i64,)> = qb.build_query_as().fetch_all(pool).await?;
     Ok(activity_ids.into_iter().map(|(id,)| id).collect())
 }
 
 pub async fn calculate_evm_kpis(
     pool: &SqlitePool,
-    plan_version_id: i64,
+    filter: &EvmFilter,
     up_to_date: NaiveDate,
-    target_wbs_id: Option<i64>,
 ) -> DbResult<EvmKpis> {
-    let activity_ids = get_filtered_activity_ids(pool, plan_version_id, target_wbs_id).await?;
+    let activity_ids = get_filtered_activity_ids(pool, filter).await?;
     if activity_ids.is_empty() {
         return Ok(EvmKpis::default());
     }
+    let plan_version_id = filter.plan_version_id;
 
     let activity_ids_json =
         serde_json::to_string(&activity_ids).map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
@@ -162,14 +190,14 @@ fn end_of_month(date: NaiveDate) -> NaiveDate {
 
 pub async fn calculate_s_curve_data(
     pool: &SqlitePool,
-    plan_version_id: i64,
+    filter: &EvmFilter,
     granularity: Granularity,
-    target_wbs_id: Option<i64>,
 ) -> DbResult<Vec<SCurveDataPoint>> {
-    let activity_ids = get_filtered_activity_ids(pool, plan_version_id, target_wbs_id).await?;
+    let activity_ids = get_filtered_activity_ids(pool, filter).await?;
     if activity_ids.is_empty() {
         return Ok(vec![]);
     }
+    let plan_version_id = filter.plan_version_id;
     
     let activity_ids_json =
         serde_json::to_string(&activity_ids).map_err(|e| sqlx::Error::Decode(Box::new(e)))?;

@@ -1,4 +1,7 @@
-use crate::db::{self, ActualCost, PlanVersion, ProgressUpdate, Project, PvAllocation, SqlitePool, WbsElementDetail};
+use crate::db::{
+    self, ActualCost, PlanMilestone, PlanVersion, ProgressUpdate, Project, PvAllocation,
+    SqlitePool, User, WbsElementDetail,
+};
 use crate::evm;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -120,17 +123,15 @@ pub struct AddProgressUpdatePayload {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetEvmKpisPayload {
-    plan_version_id: i64,
+    filter: evm::EvmFilter,
     date: NaiveDate,
-    target_wbs_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetSCurveDataPayload {
-    plan_version_id: i64,
+    filter: evm::EvmFilter,
     granularity: evm::Granularity,
-    target_wbs_id: Option<i64>,
 }
 
 
@@ -427,8 +428,7 @@ pub async fn get_evm_kpis(
     pool: State<'_, SqlitePool>,
     payload: GetEvmKpisPayload,
 ) -> AppResult<evm::EvmKpis> {
-    let kpis =
-        evm::calculate_evm_kpis(&pool, payload.plan_version_id, payload.date, payload.target_wbs_id).await?;
+    let kpis = evm::calculate_evm_kpis(&pool, &payload.filter, payload.date).await?;
     Ok(kpis)
 }
 
@@ -437,14 +437,32 @@ pub async fn get_s_curve_data(
     pool: State<'_, SqlitePool>,
     payload: GetSCurveDataPayload,
 ) -> AppResult<Vec<evm::SCurveDataPoint>> {
-    let data = evm::calculate_s_curve_data(
-        &pool,
-        payload.plan_version_id,
-        payload.granularity,
-        payload.target_wbs_id,
-    )
-    .await?;
+    let data = evm::calculate_s_curve_data(&pool, &payload.filter, payload.granularity).await?;
     Ok(data)
+}
+
+#[tauri::command]
+pub async fn list_users(pool: State<'_, SqlitePool>) -> AppResult<Vec<User>> {
+    let users = db::list_users(&pool).await?;
+    Ok(users)
+}
+
+#[tauri::command]
+pub async fn list_plan_milestones(
+    pool: State<'_, SqlitePool>,
+    plan_version_id: i64,
+) -> AppResult<Vec<PlanMilestone>> {
+    let milestones = db::list_plan_milestones(&pool, plan_version_id).await?;
+    Ok(milestones)
+}
+
+#[tauri::command]
+pub async fn list_all_tags_for_plan_version(
+    pool: State<'_, SqlitePool>,
+    plan_version_id: i64,
+) -> AppResult<Vec<String>> {
+    let tags = db::list_all_tags_for_plan_version(&pool, plan_version_id).await?;
+    Ok(tags)
 }
 
 #[tauri::command]

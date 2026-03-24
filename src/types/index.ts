@@ -67,6 +67,21 @@ export interface EvmKpis {
   spi: number;
 }
 
+export interface User {
+  id: number;
+  name: string;
+  role: string;
+}
+
+export interface PlanMilestone {
+  id: number;
+  planVersionId: number;
+  milestoneId: number;
+  name: string;
+  targetDate: string; // "YYYY-MM-DD"
+  isDeleted: boolean;
+}
+
 export interface SCurveDataPoint {
   date: string; // "YYYY-MM"
   cumulativePv: number;
@@ -81,9 +96,12 @@ export type Granularity = 'daily' | 'weekly' | 'monthly';
 export type ChartType = 'SCurve' | 'EvEtcArea';
 
 export interface WidgetConfig {
-  id: string;
+  id:string;
   title: string;
   chartType: ChartType;
   granularity: Granularity;
-  targetWbsId: number | null;
+  wbsIds: number[];
+  userIds: number[];
+  milestoneIds: number[];
+  tags: string[];
 }
