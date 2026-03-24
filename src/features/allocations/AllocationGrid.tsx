@@ -133,7 +133,7 @@ const GridRow = ({
   days: dayjs.Dayjs[];
   allocations: AllocationMap;
   allElements: WbsElementDetail[];
-  onPvChange: (wbsElementId: number, date: string, value: number | null, shouldRefetch?: boolean) => void;
+  onPvChange: (wbsElementId: number, date: string, value: number | null) => void;
   isReadOnly: boolean;
   onCellKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
   onCellPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
@@ -414,8 +414,23 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
   };
 
   const handlePvChange = useCallback(
-    async (wbsElementId: number, date: string, value: number | null, shouldRefetch = true) => {
+    async (wbsElementId: number, date: string, value: number | null) => {
       if (!planVersionId) return;
+
+      setAllocations(prev => {
+        const newAllocs = JSON.parse(JSON.stringify(prev)); // Deep copy for mutation
+        if (!newAllocs[wbsElementId]) {
+          newAllocs[wbsElementId] = {};
+        }
+
+        if (value !== null && value > 0) {
+          newAllocs[wbsElementId][date] = { id: prev[wbsElementId]?.[date]?.id || -1, pv: value };
+        } else {
+          delete newAllocs[wbsElementId][date];
+        }
+        return newAllocs;
+      });
+
       try {
         await invoke('upsert_daily_allocation', {
           payload: {
@@ -425,14 +440,10 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
             plannedValue: value,
           },
         });
-        if (shouldRefetch) {
-          // Note: We refetch all data for simplicity. For better performance,
-          // we could update the local `allocations` state optimistically.
-          fetchAllData();
-        }
       } catch (error) {
         console.error('Failed to upsert allocation:', error);
-        // Optionally, show an error notification to the user
+        // On error, revert by refetching all data
+        fetchAllData();
       }
     },
     [planVersionId, fetchAllData]
@@ -459,7 +470,7 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
         focusCell(wbsElementId, dateStrs[colIndex + 1]);
       } else if (key === 'Delete' || key === 'Backspace') {
         const cellsToUpdate = selectedCells.size > 1 ? selectedCells : new Set([`cell-pv-${wbsElementId}-${date}`]);
-        const allocations = Array.from(cellsToUpdate).map(cellId => {
+        const payload = Array.from(cellsToUpdate).map(cellId => {
             const [,,, ...dateParts] = cellId.split('-');
             const cellWbsId = Number(cellId.split('-')[2]);
             return {
@@ -468,14 +479,27 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
                 plannedValue: null,
             };
         });
+
+        setAllocations(prev => {
+            const newAllocs = JSON.parse(JSON.stringify(prev));
+            payload.forEach(item => {
+                if (newAllocs[item.wbsElementId]) {
+                    delete newAllocs[item.wbsElementId][item.date];
+                }
+            });
+            return newAllocs;
+        });
+
         if (planVersionId) {
-            invoke('upsert_daily_allocations_bulk', { payload: { planVersionId, allocations } })
-                .then(() => fetchAllData())
-                .catch(err => console.error("Bulk delete failed:", err));
+            invoke('upsert_daily_allocations_bulk', { payload: { planVersionId, allocations: payload } })
+                .catch(err => {
+                    console.error("Bulk delete failed:", err);
+                    fetchAllData();
+                });
         }
       }
     },
-    [activityRowIds, dateStrs, handlePvChange, selectedCells, fetchAllData]
+    [activityRowIds, dateStrs, planVersionId, selectedCells, fetchAllData]
   );
 
   const handleCellPaste = useCallback(
@@ -484,47 +508,64 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
         if (isReadOnly || !planVersionId) return;
 
         const pasteData = e.clipboardData.getData('text');
+        let payload: { wbsElementId: number, date: string, plannedValue: number | null }[] = [];
         
-        try {
-            if (selectedCells.size > 1 && !pasteData.includes('\t') && !pasteData.includes('\n') && !pasteData.includes('\r')) {
-                const valueStr = pasteData.trim();
-                const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
-                const allocations = Array.from(selectedCells).map(cellId => {
-                    const [,,, ...dateParts] = cellId.split('-');
-                    const cellWbsId = Number(cellId.split('-')[2]);
-                    return { wbsElementId: cellWbsId, date: dateParts.join('-'), plannedValue: value };
-                });
-                await invoke('upsert_daily_allocations_bulk', { payload: { planVersionId, allocations }});
-            } else {
-                const rows = pasteData.split(/\r\n|\n|\r/);
-                const startRowIndex = activityRowIds.indexOf(startWbsId);
-                const startColIndex = dateStrs.indexOf(startDate);
-                if (startRowIndex === -1 || startColIndex === -1) return;
+        if (selectedCells.size > 1 && !pasteData.includes('\t') && !pasteData.includes('\n') && !pasteData.includes('\r')) {
+            const valueStr = pasteData.trim();
+            const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
+            payload = Array.from(selectedCells).map(cellId => {
+                const [,,, ...dateParts] = cellId.split('-');
+                const cellWbsId = Number(cellId.split('-')[2]);
+                return { wbsElementId: cellWbsId, date: dateParts.join('-'), plannedValue: value };
+            });
+        } else {
+            const rows = pasteData.split(/\r\n|\n|\r/);
+            const startRowIndex = activityRowIds.indexOf(startWbsId);
+            const startColIndex = dateStrs.indexOf(startDate);
+            if (startRowIndex === -1 || startColIndex === -1) return;
 
-                const allocations: { wbsElementId: number, date: string, plannedValue: number | null }[] = [];
-                for (let i = 0; i < rows.length; i++) {
-                    const rowData = rows[i].split('\t');
-                    const currentRowIndex = startRowIndex + i;
-                    if (currentRowIndex >= activityRowIds.length) break;
-                    const currentWbsId = activityRowIds[currentRowIndex];
+            for (let i = 0; i < rows.length; i++) {
+                const rowData = rows[i].split('\t');
+                const currentRowIndex = startRowIndex + i;
+                if (currentRowIndex >= activityRowIds.length) break;
+                const currentWbsId = activityRowIds[currentRowIndex];
 
-                    for (let j = 0; j < rowData.length; j++) {
-                        const currentColIndex = startColIndex + j;
-                        if (currentColIndex >= dateStrs.length) break;
-                        const currentDate = dateStrs[currentColIndex];
-                        const valueStr = rowData[j].trim();
-                        const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
-                        allocations.push({ wbsElementId: currentWbsId, date: currentDate, plannedValue: value });
-                    }
+                for (let j = 0; j < rowData.length; j++) {
+                    const currentColIndex = startColIndex + j;
+                    if (currentColIndex >= dateStrs.length) break;
+                    const currentDate = dateStrs[currentColIndex];
+                    const valueStr = rowData[j].trim();
+                    const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
+                    payload.push({ wbsElementId: currentWbsId, date: currentDate, plannedValue: value });
                 }
-                await invoke('upsert_daily_allocations_bulk', { payload: { planVersionId, allocations } });
             }
-            fetchAllData();
+        }
+        
+        if (payload.length === 0) return;
+
+        setAllocations(prev => {
+            const newAllocs = JSON.parse(JSON.stringify(prev));
+            payload.forEach(item => {
+                if (!newAllocs[item.wbsElementId]) {
+                    newAllocs[item.wbsElementId] = {};
+                }
+                if (item.plannedValue !== null && item.plannedValue > 0) {
+                    newAllocs[item.wbsElementId][item.date] = { id: prev[item.wbsElementId]?.[item.date]?.id || -1, pv: item.plannedValue };
+                } else {
+                    delete newAllocs[item.wbsElementId][item.date];
+                }
+            });
+            return newAllocs;
+        });
+
+        try {
+            await invoke('upsert_daily_allocations_bulk', { payload: { planVersionId, allocations: payload } });
         } catch (err) {
             console.error("Bulk paste failed:", err);
+            fetchAllData();
         }
     },
-    [activityRowIds, dateStrs, isReadOnly, handlePvChange, fetchAllData, selectedCells]
+    [activityRowIds, dateStrs, isReadOnly, planVersionId, fetchAllData, selectedCells]
   );
   
   useEffect(() => {
@@ -607,7 +648,9 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
                 {daysInMonth.map((day) => {
                   const isWeekend = day.day() === 0 || day.day() === 6;
                   return (
-                    <Table.Th key={day.format('YYYY-MM-DD')} className={`${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}>
+                    <Table.Th key={day.format('YYYY-MM-DD')} className={`${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}
+                      style={{width: '2.5rem', minWidth: '2.5rem', paddingLeft: 0, paddingRight: 0, textAlign: 'center'}}
+                    >
                       <div>{day.format('ddd')}</div>
                       <div>{day.format('D')}</div>
                     </Table.Th>
