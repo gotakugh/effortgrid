@@ -1,4 +1,4 @@
-use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool};
+use sqlx::SqlitePool;
 use thiserror::Error;
 
 // アプリケーションのローカルファイルとしてデータベースを永続化します。
