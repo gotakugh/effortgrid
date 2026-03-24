@@ -141,7 +141,7 @@ pub async fn calculate_evm_kpis(
 
     // 3. AC (Actual Cost)
     let ac_row: (Option<f64>,) = sqlx::query_as(
-        "SELECT SUM(actual_cost) FROM actual_costs WHERE wbs_element_id IN (SELECT value FROM json_each(?)) AND work_date <= ?",
+        "SELECT SUM(actual_cost) FROM actual_costs WHERE wbs_element_id IN (SELECT value FROM json_each(?)) AND work_date <= ? AND is_deleted = false",
     )
     .bind(&activity_ids_json)
     .bind(up_to_date)
@@ -155,7 +155,7 @@ pub async fn calculate_evm_kpis(
         let activity_bac = activity.estimated_pv.unwrap_or(0.0);
         if activity_bac > 0.0 {
             let progress_row: Option<ProgressInfo> = sqlx::query_as(
-                "SELECT progress_percent FROM progress_updates WHERE wbs_element_id = ? AND report_date <= ? ORDER BY report_date DESC, id DESC LIMIT 1",
+                "SELECT progress_percent FROM progress_updates WHERE wbs_element_id = ? AND report_date <= ? AND is_deleted = false ORDER BY report_date DESC, id DESC LIMIT 1",
             )
             .bind(activity.wbs_element_id)
             .bind(up_to_date)
@@ -208,9 +208,9 @@ pub async fn calculate_s_curve_data(
             UNION ALL
             SELECT end_date as d FROM pv_allocations WHERE plan_version_id = ? AND wbs_element_id IN (SELECT value FROM json_each(?))
             UNION ALL
-            SELECT work_date as d FROM actual_costs WHERE wbs_element_id IN (SELECT value FROM json_each(?))
+            SELECT work_date as d FROM actual_costs WHERE wbs_element_id IN (SELECT value FROM json_each(?)) AND is_deleted = false
             UNION ALL
-            SELECT report_date as d FROM progress_updates WHERE wbs_element_id IN (SELECT value FROM json_each(?))
+            SELECT report_date as d FROM progress_updates WHERE wbs_element_id IN (SELECT value FROM json_each(?)) AND is_deleted = false
         ) as t
         "#,
     )
@@ -243,8 +243,8 @@ pub async fn calculate_s_curve_data(
         .bind(&activity_ids_json)
         .fetch_all(pool)
         .await?;
-    let all_costs: Vec<(NaiveDate, f64)> = sqlx::query_as("SELECT work_date, actual_cost FROM actual_costs WHERE wbs_element_id IN (SELECT value FROM json_each(?))").bind(&activity_ids_json).fetch_all(pool).await?;
-    let all_progress: Vec<(i64, NaiveDate, f64)> = sqlx::query_as("SELECT wbs_element_id, report_date, progress_percent FROM progress_updates WHERE wbs_element_id IN (SELECT value FROM json_each(?)) ORDER BY report_date ASC, id ASC").bind(&activity_ids_json).fetch_all(pool).await?;
+    let all_costs: Vec<(NaiveDate, f64)> = sqlx::query_as("SELECT work_date, actual_cost FROM actual_costs WHERE wbs_element_id IN (SELECT value FROM json_each(?)) AND is_deleted = false").bind(&activity_ids_json).fetch_all(pool).await?;
+    let all_progress: Vec<(i64, NaiveDate, f64)> = sqlx::query_as("SELECT wbs_element_id, report_date, progress_percent FROM progress_updates WHERE wbs_element_id IN (SELECT value FROM json_each(?)) AND is_deleted = false ORDER BY report_date ASC, id ASC").bind(&activity_ids_json).fetch_all(pool).await?;
     
     let mut progress_map: BTreeMap<(i64, NaiveDate), f64> = BTreeMap::new();
     for (wbs_id, report_date, percent) in all_progress {
