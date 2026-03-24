@@ -334,8 +334,9 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
     cell?.focus();
   };
 
-  const handleCellMouseDown = (e: React.MouseEvent, wbsElementId: number, date: string) => {
+  const handleCellMouseDown = (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, date: string) => {
     e.preventDefault();
+    e.currentTarget.focus();
     setIsSelecting(true);
     const cellId = `cell-pv-${wbsElementId}-${date}`;
     

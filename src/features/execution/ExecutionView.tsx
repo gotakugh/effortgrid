@@ -296,6 +296,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
 
   const handleCellMouseDown = (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, date: string) => {
     e.preventDefault();
+    e.currentTarget.focus();
     setIsSelecting(true);
     const cellId = `cell-ac-${wbsElementId}-${date}`;
     
