@@ -249,6 +249,80 @@ pub async fn update_wbs_element_pv(
     Ok(rows_affected)
 }
 
+pub async fn list_allocations_for_period(
+    pool: &SqlitePool,
+    plan_version_id: i64,
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+) -> DbResult<Vec<PvAllocation>> {
+    let allocations = sqlx::query_as::<_, PvAllocation>(
+        "SELECT * FROM pv_allocations WHERE plan_version_id = ? AND start_date >= ? AND start_date <= ?",
+    )
+    .bind(plan_version_id)
+    .bind(start_date)
+    .bind(end_date)
+    .fetch_all(pool)
+    .await?;
+    Ok(allocations)
+}
+
+pub async fn upsert_daily_allocation(
+    pool: &SqlitePool,
+    plan_version_id: i64,
+    wbs_element_id: i64,
+    date: NaiveDate,
+    planned_value: Option<f64>,
+) -> DbResult<()> {
+    let mut tx = pool.begin().await?;
+
+    // Find existing allocation for this specific day
+    let existing_id: Option<i64> = sqlx::query_scalar(
+        "SELECT id FROM pv_allocations WHERE plan_version_id = ? AND wbs_element_id = ? AND start_date = ?",
+    )
+    .bind(plan_version_id)
+    .bind(wbs_element_id)
+    .bind(date)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let pv_to_use = planned_value.filter(|&pv| pv > 0.0);
+
+    match (pv_to_use, existing_id) {
+        // Value is present, so update or insert
+        (Some(pv), Some(id)) => {
+            sqlx::query("UPDATE pv_allocations SET planned_value = ? WHERE id = ?")
+                .bind(pv)
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        (Some(pv), None) => {
+            sqlx::query(
+                "INSERT INTO pv_allocations (plan_version_id, wbs_element_id, start_date, end_date, planned_value) VALUES (?, ?, ?, ?, ?)",
+            )
+            .bind(plan_version_id)
+            .bind(wbs_element_id)
+            .bind(date)
+            .bind(date)
+            .bind(pv)
+            .execute(&mut *tx)
+            .await?;
+        }
+        // Value is zero or None, so delete
+        (None, Some(id)) => {
+            sqlx::query("DELETE FROM pv_allocations WHERE id = ?")
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        // No value and no record, nothing to do
+        (None, None) => {}
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
 // ----- PV Allocations -----
 
 pub async fn list_pv_allocations_for_wbs_element(

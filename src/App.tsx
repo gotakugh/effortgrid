@@ -16,15 +16,17 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { useForm, zodResolver } from '@mantine/form';
 import { z } from 'zod';
-import { IconPlus, IconTree, IconLayoutDashboard } from '@tabler/icons-react';
+import { IconPlus, IconTree, IconLayoutDashboard, IconCalendarStats } from '@tabler/icons-react';
 import { Project, PlanVersion } from './types';
 import { WbsListView } from './features/wbs/WbsListView';
+import { AllocationGrid } from './features/allocations/AllocationGrid';
 
 const createProjectSchema = z.object({
   name: z.string().min(1, { message: 'Project name is required' }),
 });
 
 function App() {
+  const [activeView, setActiveView] = useState('wbs');
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -156,7 +158,20 @@ function App() {
             {selectedProject ? selectedProject.name : 'No Project Selected'}
           </Text>
           <NavLink href="#" label="Dashboard" leftSection={<IconLayoutDashboard size="1rem" />} disabled />
-          <NavLink href="#" label="WBS & Estimates" leftSection={<IconTree size="1rem" />} active />
+          <NavLink
+            href="#"
+            label="WBS & Estimates"
+            leftSection={<IconTree size="1rem" />}
+            active={activeView === 'wbs'}
+            onClick={() => setActiveView('wbs')}
+          />
+          <NavLink
+            href="#"
+            label="Resource Allocation"
+            leftSection={<IconCalendarStats size="1rem" />}
+            active={activeView === 'allocations'}
+            onClick={() => setActiveView('allocations')}
+          />
           {/* ... other nav links from UI_DESIGN.md */}
           <Button onClick={openCreateModal} fullWidth leftSection={<IconPlus size={14} />} mt="xl">
             New Project
@@ -164,7 +179,8 @@ function App() {
         </AppShell.Navbar>
 
         <AppShell.Main>
-          <WbsListView planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} />
+          {activeView === 'wbs' && <WbsListView planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} />}
+          {activeView === 'allocations' && <AllocationGrid planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} />}
         </AppShell.Main>
       </AppShell>
     </>

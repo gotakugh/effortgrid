@@ -31,7 +31,9 @@ pub fn run() {
             commands::list_pv_allocations_for_wbs_element,
             commands::add_pv_allocation,
             commands::update_pv_allocation,
-            commands::delete_pv_allocation
+            commands::delete_pv_allocation,
+            commands::list_allocations_for_period,
+            commands::upsert_daily_allocation
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

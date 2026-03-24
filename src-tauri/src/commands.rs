@@ -75,6 +75,24 @@ pub struct UpdatePvAllocationPayload {
     planned_value: f64,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListAllocationsForPeriodPayload {
+    plan_version_id: i64,
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertDailyAllocationPayload {
+    plan_version_id: i64,
+    wbs_element_id: i64,
+    date: NaiveDate,
+    planned_value: Option<f64>,
+}
+
+
 // ----- Tauri Commands -----
 
 #[tauri::command]
@@ -232,5 +250,38 @@ pub async fn update_pv_allocation(
 #[tauri::command]
 pub async fn delete_pv_allocation(pool: State<'_, SqlitePool>, id: i64) -> AppResult<()> {
     db::delete_pv_allocation(&pool, id).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn list_allocations_for_period(
+    pool: State<'_, SqlitePool>,
+    payload: ListAllocationsForPeriodPayload,
+) -> AppResult<Vec<PvAllocation>> {
+    let allocations = db::list_allocations_for_period(
+        &pool,
+        payload.plan_version_id,
+        payload.start_date,
+        payload.end_date,
+    )
+    .await?;
+    Ok(allocations)
+}
+
+#[tauri::command]
+pub async fn upsert_daily_allocation(
+    pool: State<'_, SqlitePool>,
+    payload: UpsertDailyAllocationPayload,
+) -> AppResult<()> {
+    check_is_activity(&pool, payload.wbs_element_id, payload.plan_version_id).await?;
+
+    db::upsert_daily_allocation(
+        &pool,
+        payload.plan_version_id,
+        payload.wbs_element_id,
+        payload.date,
+        payload.planned_value,
+    )
+    .await?;
     Ok(())
 }
