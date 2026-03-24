@@ -124,13 +124,13 @@ const PvInputCell = ({
 };
 
 const GridRow = ({
-  node, level, days, allocations, allElements, users, assignedUsers,
+  node, level, days, allocations, allElements, users, assignedUsersMap,
   onPvChange, isReadOnly, onAddUser,
   onCellKeyDown, onCellPaste, onCellMouseDown, onCellMouseOver, selectedCells
 }: {
   node: TreeNode; level: number; days: dayjs.Dayjs[];
   allocations: AllocationMap; allElements: WbsElementDetail[]; users: User[];
-  assignedUsers: Set<number>;
+  assignedUsersMap: { [wbsId: number]: Set<number> };
   onPvChange: (wbsElementId: number, userId: number, date: string, value: number | null) => void;
   isReadOnly: boolean;
   onAddUser: (wbsElementId: number, userId: number) => void;
@@ -143,6 +143,7 @@ const GridRow = ({
 
   const isActivity = node.elementType === 'Activity';
   const userMap = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
+  const assignedUsers = useMemo(() => assignedUsersMap[node.wbsElementId] || new Set(), [assignedUsersMap, node.wbsElementId]);
   
   const getRollupValue = (date: string): number => {
     const getIds = (n: TreeNode): number[] => [n.wbsElementId, ...n.children.flatMap(getIds)];
@@ -262,7 +263,7 @@ const GridRow = ({
         <GridRow
           key={child.id} node={child} level={level + 1} days={days}
           allocations={allocations} allElements={allElements} users={users}
-          assignedUsers={assignedUsers[child.wbsElementId] || new Set()}
+          assignedUsersMap={assignedUsersMap}
           onPvChange={onPvChange} isReadOnly={isReadOnly} onAddUser={onAddUser}
           onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste}
           onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver}
@@ -741,7 +742,7 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
                 <GridRow
                     key={node.id} node={node} level={0} days={daysInMonth}
                     allocations={allocations} allElements={elements} users={users}
-                    assignedUsers={assignedUsers[node.wbsElementId] || new Set()}
+                    assignedUsersMap={assignedUsers}
                     onPvChange={handlePvChange} isReadOnly={isReadOnly}
                     onAddUser={handleAddUserToActivity}
                     onCellKeyDown={handleCellKeyDown}

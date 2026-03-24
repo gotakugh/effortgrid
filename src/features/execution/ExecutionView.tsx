@@ -74,12 +74,12 @@ const AcInputCell = ({ wbsElementId, userId, date, initialAc, onCommit, isReadOn
 };
 
 const GridRow = ({ 
-    node, level, days, data, allElements, users, assignedUsers,
+    node, level, days, data, allElements, users, assignedUsersMap,
     onAcChange, isReadOnly, onAddUser,
     onCellKeyDown, onCellPaste, onCellMouseDown, onCellMouseOver, selectedCells 
 }: {
   node: TreeNode; level: number; days: dayjs.Dayjs[]; data: ExecutionMap; allElements: WbsElementDetail[]; users: User[];
-  assignedUsers: Set<number>;
+  assignedUsersMap: { [wbsId: number]: Set<number> };
   onAcChange: (wbsElementId: number, userId: number, date: string, value: number | null) => void;
   isReadOnly: boolean;
   onAddUser: (wbsElementId: number, userId: number) => void;
@@ -91,6 +91,7 @@ const GridRow = ({
 }) => {
   const isActivity = node.elementType === 'Activity';
   const userMap = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
+  const assignedUsers = useMemo(() => assignedUsersMap[node.wbsElementId] || new Set(), [assignedUsersMap, node.wbsElementId]);
 
   const getRollupValue = (date: string, type: 'pv' | 'ac'): number => {
     const getIds = (n: TreeNode): number[] => [n.wbsElementId, ...n.children.flatMap(getIds)];
@@ -133,9 +134,9 @@ const GridRow = ({
 
   return (
     <>
-      {/* Activity / Project / WorkPackage Row */}
+      {/* PV Row (Plan) */}
       <Table.Tr>
-        <Table.Td className={classes.sticky_col} style={{ borderBottom: isActivity && usersToRender.length > 0 ? 'none' : undefined }}>
+        <Table.Td rowSpan={2} className={classes.sticky_col} style={{ verticalAlign: 'middle' }}>
           <Group gap="xs" style={{ paddingLeft: level * 20 }}>
             {isActivity && (
               <Menu shadow="md" width={200}>
@@ -158,17 +159,27 @@ const GridRow = ({
         {days.map((day) => {
           const dateStr = day.format('YYYY-MM-DD');
           return (
-            <Table.Td key={dateStr} className={classes.data_cell} style={{ borderBottom: isActivity && usersToRender.length > 0 ? 'none' : undefined }}>
-              <div className={classes.rollup_cell}>
-                <Text size="xs" c="dimmed">PV: {getRollupValue(dateStr, 'pv') > 0 ? getRollupValue(dateStr, 'pv').toFixed(1) : '-'}</Text>
-                <Text size="sm" fw={500}>AC: {getRollupValue(dateStr, 'ac') > 0 ? getRollupValue(dateStr, 'ac').toFixed(1) : '-'}</Text>
-              </div>
+            <Table.Td key={`${dateStr}-pv`} className={classes.data_cell} style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
+              <Text size="sm" c="dimmed">{getRollupValue(dateStr, 'pv') > 0 ? getRollupValue(dateStr, 'pv').toFixed(1) : ''}</Text>
             </Table.Td>
           );
         })}
-        <Table.Td className={classes.summary_col} style={{ borderBottom: isActivity && usersToRender.length > 0 ? 'none' : undefined }}>
-          <Text size="xs" c="dimmed">PV: {totalForMonth('pv').toFixed(1)}</Text>
-          <Text size="sm" fw={500}>AC: {totalForMonth('ac').toFixed(1)}</Text>
+        <Table.Td className={classes.summary_col} style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
+          <Text size="sm" c="dimmed">{totalForMonth('pv') > 0 ? totalForMonth('pv').toFixed(1) : ''}</Text>
+        </Table.Td>
+      </Table.Tr>
+      {/* AC Row (Actual) */}
+      <Table.Tr>
+        {days.map((day) => {
+          const dateStr = day.format('YYYY-MM-DD');
+          return (
+            <Table.Td key={`${dateStr}-ac`} className={classes.data_cell} style={{ padding: 'var(--table-td-padding)', borderTop: 'none', textAlign: 'right', verticalAlign: 'middle' }}>
+              <Text size="sm" fw={500}>{getRollupValue(dateStr, 'ac') > 0 ? getRollupValue(dateStr, 'ac').toFixed(1) : ''}</Text>
+            </Table.Td>
+          );
+        })}
+        <Table.Td className={classes.summary_col} style={{ textAlign: 'right', verticalAlign: 'middle', borderTop: 'none' }}>
+          <Text size="sm" fw={500}>{totalForMonth('ac') > 0 ? totalForMonth('ac').toFixed(1) : ''}</Text>
         </Table.Td>
       </Table.Tr>
 
@@ -221,7 +232,7 @@ const GridRow = ({
       })}
 
       {/* Child WBS Element Rows */}
-      {node.children.map((child) => <GridRow key={child.id} node={child} level={level + 1} days={days} data={data} allElements={allElements} users={users} assignedUsers={assignedUsers[child.wbsElementId] || new Set()} onAcChange={onAcChange} onAddUser={onAddUser} isReadOnly={isReadOnly} onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste} onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver} selectedCells={selectedCells} />)}
+      {node.children.map((child) => <GridRow key={child.id} node={child} level={level + 1} days={days} data={data} allElements={allElements} users={users} assignedUsersMap={assignedUsersMap} onAcChange={onAcChange} onAddUser={onAddUser} isReadOnly={isReadOnly} onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste} onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver} selectedCells={selectedCells} />)}
     </>
   );
 };
@@ -667,7 +678,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
                 <GridRow 
                     key={node.id} node={node} level={0} days={daysInMonth} 
                     data={executionData} allElements={elements} users={users}
-                    assignedUsers={assignedUsers[node.wbsElementId] || new Set()}
+                    assignedUsersMap={assignedUsers}
                     onAcChange={handleAcChange} isReadOnly={isReadOnly} 
                     onAddUser={handleAddUserToActivity}
                     onCellKeyDown={handleCellKeyDown} 
