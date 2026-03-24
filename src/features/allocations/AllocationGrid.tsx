@@ -9,9 +9,12 @@ import {
   Badge,
   ActionIcon,
   Box,
+  Loader,
+  Center,
+  Alert,
 } from '@mantine/core';
 import { MonthPickerInput } from '@mantine/dates';
-import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconAlertCircle } from '@tabler/icons-react';
 import { WbsElementDetail, WbsElementType, PvAllocation } from '../../types';
 import dayjs from 'dayjs';
 import classes from './AllocationGrid.module.css';
@@ -45,6 +48,42 @@ const getBadgeColor = (type: WbsElementType) => {
 
 
 // --- Sub-components ---
+
+// A stateful component to manage each editable cell, fixing the defaultValue issue.
+const PvInputCell = ({
+  initialValue,
+  onCommit,
+}: {
+  initialValue?: number;
+  onCommit: (value: number | null) => void;
+}) => {
+  const [value, setValue] = useState<string | number>(initialValue ?? '');
+
+  useEffect(() => {
+    setValue(initialValue ?? '');
+  }, [initialValue]);
+
+  const handleBlur = () => {
+    const numericValue = value === '' ? null : Number(value);
+    const initialNumericValue = initialValue ?? null;
+    if (numericValue !== initialNumericValue) {
+      onCommit(numericValue);
+    }
+  };
+
+  return (
+    <NumberInput
+      classNames={{ input: classes.pv_input }}
+      value={value}
+      onChange={setValue}
+      onBlur={handleBlur}
+      step={0.1}
+      min={0}
+      hideControls
+    />
+  );
+};
+
 const GridRow = ({
   node,
   level,
@@ -97,16 +136,9 @@ const GridRow = ({
           return (
             <Table.Td key={dateStr}>
               {node.elementType === 'Activity' ? (
-                <NumberInput
-                  classNames={{ input: classes.pv_input }}
-                  defaultValue={allocations[node.wbsElementId]?.[dateStr]?.pv}
-                  onBlur={(e) => {
-                    const value = e.currentTarget.value;
-                    onPvChange(node.wbsElementId, dateStr, value === '' ? null : parseFloat(value));
-                  }}
-                  step={0.1}
-                  min={0}
-                  hideControls
+                <PvInputCell
+                  initialValue={allocations[node.wbsElementId]?.[dateStr]?.pv}
+                  onCommit={(value) => onPvChange(node.wbsElementId, dateStr, value)}
                 />
               ) : (
                 <div className={classes.rollup_cell}>
@@ -138,6 +170,8 @@ export function AllocationGrid({ planVersionId }: GridProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [elements, setElements] = useState<WbsElementDetail[]>([]);
   const [allocations, setAllocations] = useState<AllocationMap>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const daysInMonth = useMemo(() => {
     const start = dayjs(currentMonth).startOf('month');
@@ -152,7 +186,13 @@ export function AllocationGrid({ planVersionId }: GridProps) {
   }, [currentMonth]);
 
   const fetchAllData = useCallback(async () => {
-    if (!planVersionId) return;
+    if (!planVersionId) {
+      setElements([]);
+      setAllocations({});
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
     const start = daysInMonth[0].format('YYYY-MM-DD');
     const end = daysInMonth[daysInMonth.length - 1].format('YYYY-MM-DD');
 
@@ -174,8 +214,11 @@ export function AllocationGrid({ planVersionId }: GridProps) {
         allocMap[alloc.wbsElementId][alloc.startDate] = { id: alloc.id, pv: alloc.plannedValue };
       }
       setAllocations(allocMap);
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
+    } catch (err: any) {
+      console.error('Failed to fetch data:', err);
+      setError(`Failed to load allocation data. Check console for details.`);
+    } finally {
+      setIsLoading(false);
     }
   }, [planVersionId, daysInMonth]);
 
@@ -213,10 +256,12 @@ export function AllocationGrid({ planVersionId }: GridProps) {
             plannedValue: value,
           },
         });
-        // Optimistically update local state or refetch for consistency
+        // Note: We refetch all data for simplicity. For better performance,
+        // we could update the local `allocations` state optimistically.
         fetchAllData();
       } catch (error) {
         console.error('Failed to upsert allocation:', error);
+        // Optionally, show an error notification to the user
       }
     },
     [planVersionId, fetchAllData]
@@ -235,48 +280,53 @@ export function AllocationGrid({ planVersionId }: GridProps) {
       <Group justify="space-between">
         <Title order={2}>Resource Allocation</Title>
         <Group>
-            <ActionIcon onClick={() => changeMonth(-1)} variant="default"><IconChevronLeft size={16} /></ActionIcon>
+            <ActionIcon onClick={() => changeMonth(-1)} variant="default" aria-label="Previous month"><IconChevronLeft size={16} /></ActionIcon>
             <MonthPickerInput
                 value={currentMonth}
                 onChange={(date) => date && setCurrentMonth(date)}
                 placeholder="Pick month"
                 style={{width: 150}}
             />
-            <ActionIcon onClick={() => changeMonth(1)} variant="default"><IconChevronRight size={16} /></ActionIcon>
+            <ActionIcon onClick={() => changeMonth(1)} variant="default" aria-label="Next month"><IconChevronRight size={16} /></ActionIcon>
         </Group>
       </Group>
 
-      <Box className={classes.table_container}>
-        <Table className={classes.table} withColumnBorders>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th className={classes.sticky_col_header}>WBS Element</Table.Th>
-              {daysInMonth.map((day) => {
-                const isWeekend = day.day() === 0 || day.day() === 6;
-                return (
-                  <Table.Th key={day.format('YYYY-MM-DD')} className={`${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}>
-                    <div>{day.format('ddd')}</div>
-                    <div>{day.format('D')}</div>
-                  </Table.Th>
-                );
-              })}
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {tree.map(node => (
-                <GridRow 
-                    key={node.id}
-                    node={node}
-                    level={0}
-                    days={daysInMonth}
-                    allocations={allocations}
-                    allElements={elements}
-                    onPvChange={handlePvChange}
-                />
-            ))}
-          </Table.Tbody>
-        </Table>
-      </Box>
+      {isLoading && <Center style={{flex: 1}}><Loader /></Center>}
+      {error && <Alert title="Error" color="red" icon={<IconAlertCircle />}>{error}</Alert>}
+
+      {!isLoading && !error && (
+        <Box className={classes.table_container}>
+          <Table className={classes.table} withColumnBorders>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th className={classes.sticky_col_header}>WBS Element</Table.Th>
+                {daysInMonth.map((day) => {
+                  const isWeekend = day.day() === 0 || day.day() === 6;
+                  return (
+                    <Table.Th key={day.format('YYYY-MM-DD')} className={`${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}>
+                      <div>{day.format('ddd')}</div>
+                      <div>{day.format('D')}</div>
+                    </Table.Th>
+                  );
+                })}
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {tree.map(node => (
+                  <GridRow 
+                      key={node.id}
+                      node={node}
+                      level={0}
+                      days={daysInMonth}
+                      allocations={allocations}
+                      allElements={elements}
+                      onPvChange={handlePvChange}
+                  />
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Box>
+      )}
     </Stack>
   );
 }
