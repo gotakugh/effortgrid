@@ -57,3 +57,19 @@ export interface ProgressUpdate {
   notes: string | null;
   isDeleted: boolean;
 }
+
+export interface EvmKpis {
+  bac: number;
+  pv: number;
+  ev: number;
+  ac: number;
+  cpi: number;
+  spi: number;
+}
+
+export interface SCurveDataPoint {
+  date: string; // "YYYY-MM"
+  cumulativePv: number;
+  cumulativeEv: number;
+  cumulativeAc: number;
+}

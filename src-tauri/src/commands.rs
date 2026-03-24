@@ -1,4 +1,5 @@
 use crate::db::{self, ActualCost, PlanVersion, ProgressUpdate, Project, PvAllocation, SqlitePool, WbsElementDetail};
+use crate::evm;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -114,6 +115,13 @@ pub struct AddProgressUpdatePayload {
     report_date: NaiveDate,
     progress_percent: f64,
     notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetEvmKpisPayload {
+    plan_version_id: i64,
+    date: NaiveDate,
 }
 
 
@@ -403,4 +411,22 @@ pub async fn get_progress_updates_for_element(
 ) -> AppResult<Vec<ProgressUpdate>> {
     let records = db::get_progress_updates_for_element(&pool, wbs_element_id).await?;
     Ok(records)
+}
+
+#[tauri::command]
+pub async fn get_evm_kpis(
+    pool: State<'_, SqlitePool>,
+    payload: GetEvmKpisPayload,
+) -> AppResult<evm::EvmKpis> {
+    let kpis = evm::calculate_evm_kpis(&pool, payload.plan_version_id, payload.date).await?;
+    Ok(kpis)
+}
+
+#[tauri::command]
+pub async fn get_s_curve_data(
+    pool: State<'_, SqlitePool>,
+    plan_version_id: i64,
+) -> AppResult<Vec<evm::SCurveDataPoint>> {
+    let data = evm::calculate_s_curve_data(&pool, plan_version_id).await?;
+    Ok(data)
 }

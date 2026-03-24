@@ -21,6 +21,7 @@ import { Project, PlanVersion } from './types';
 import { WbsListView } from './features/wbs/WbsListView';
 import { AllocationGrid } from './features/allocations/AllocationGrid';
 import { ExecutionView } from './features/execution/ExecutionView';
+import { DashboardView } from './features/dashboard/DashboardView';
 
 const createProjectSchema = z.object({
   name: z.string().min(1, { message: 'Project name is required' }),
@@ -31,7 +32,7 @@ const createBaselineSchema = z.object({
 });
 
 function App() {
-  const [activeView, setActiveView] = useState('wbs');
+  const [activeView, setActiveView] = useState('dashboard');
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -216,7 +217,13 @@ function App() {
           <Text size="xs" tt="uppercase" c="dimmed" fw={700} mb="sm">
             {selectedProject ? selectedProject.name : 'No Project Selected'}
           </Text>
-          <NavLink href="#" label="Dashboard" leftSection={<IconLayoutDashboard size="1rem" />} disabled />
+          <NavLink
+            href="#"
+            label="Dashboard"
+            leftSection={<IconLayoutDashboard size="1rem" />}
+            active={activeView === 'dashboard'}
+            onClick={() => setActiveView('dashboard')}
+          />
           <NavLink
             href="#"
             label="WBS & Estimates"
@@ -245,6 +252,7 @@ function App() {
         </AppShell.Navbar>
 
         <AppShell.Main>
+          {activeView === 'dashboard' && <DashboardView planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} />}
           {activeView === 'wbs' && <WbsListView planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} isReadOnly={isReadOnly} />}
           {activeView === 'allocations' && <AllocationGrid planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} isReadOnly={isReadOnly} />}
           {activeView === 'execution' && <ExecutionView planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} isReadOnly={isReadOnly} />}

@@ -1,0 +1,23 @@
+.stat_card {
+    position: relative;
+    overflow: hidden;
+}
+
+.stat_label {
+    text-transform: uppercase;
+    font-weight: 700;
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-dimmed);
+}
+
+.stat_value {
+    font-size: rem(24px);
+    font-weight: 700;
+}
+
+.stat_diff {
+    font-size: var(--mantine-font-size-sm);
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+}
