@@ -451,15 +451,21 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
       } else if (key === 'ArrowRight' && colIndex < dateStrs.length - 1) {
         focusCell(wbsElementId, dateStrs[colIndex + 1]);
       } else if (key === 'Delete' || key === 'Backspace') {
-        const updates: Promise<void>[] = [];
         const cellsToUpdate = selectedCells.size > 1 ? selectedCells : new Set([`cell-pv-${wbsElementId}-${date}`]);
-        
-        cellsToUpdate.forEach(cellId => {
+        const allocations = Array.from(cellsToUpdate).map(cellId => {
             const [,,, ...dateParts] = cellId.split('-');
             const cellWbsId = Number(cellId.split('-')[2]);
-            updates.push(handlePvChange(cellWbsId, dateParts.join('-'), null, false));
+            return {
+                wbsElementId: cellWbsId,
+                date: dateParts.join('-'),
+                plannedValue: null,
+            };
         });
-        Promise.all(updates).then(() => fetchAllData());
+        if (planVersionId) {
+            invoke('upsert_daily_allocations_bulk', { payload: { planVersionId, allocations } })
+                .then(() => fetchAllData())
+                .catch(err => console.error("Bulk delete failed:", err));
+        }
       }
     },
     [activityRowIds, dateStrs, handlePvChange, selectedCells, fetchAllData]
@@ -468,54 +474,48 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
   const handleCellPaste = useCallback(
     async (e: React.ClipboardEvent<HTMLInputElement>, startWbsId: number, startDate: string) => {
         e.preventDefault();
-        if (isReadOnly) return;
+        if (isReadOnly || !planVersionId) return;
 
         const pasteData = e.clipboardData.getData('text');
         
-        if (selectedCells.size > 1 && !pasteData.includes('\t') && !pasteData.includes('\n') && !pasteData.includes('\r')) {
-            const valueStr = pasteData.trim();
-            const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
-            const updates: Promise<void>[] = [];
-            selectedCells.forEach(cellId => {
-                const [,,, ...dateParts] = cellId.split('-');
-                const cellWbsId = Number(cellId.split('-')[2]);
-                updates.push(handlePvChange(cellWbsId, dateParts.join('-'), value, false));
-            });
-            await Promise.all(updates);
-            fetchAllData();
-            return;
-        }
-
-        const rows = pasteData.split(/\r\n|\n|\r/);
-
-        const startRowIndex = activityRowIds.indexOf(startWbsId);
-        const startColIndex = dateStrs.indexOf(startDate);
-
-        if (startRowIndex === -1 || startColIndex === -1) return;
-
-        const updates: Promise<void>[] = [];
-
-        for (let i = 0; i < rows.length; i++) {
-            const rowData = rows[i].split('\t');
-            const currentRowIndex = startRowIndex + i;
-
-            if (currentRowIndex >= activityRowIds.length) break;
-            const currentWbsId = activityRowIds[currentRowIndex];
-
-            for (let j = 0; j < rowData.length; j++) {
-                const currentColIndex = startColIndex + j;
-                if (currentColIndex >= dateStrs.length) break;
-
-                const currentDate = dateStrs[currentColIndex];
-                const valueStr = rowData[j].trim();
+        try {
+            if (selectedCells.size > 1 && !pasteData.includes('\t') && !pasteData.includes('\n') && !pasteData.includes('\r')) {
+                const valueStr = pasteData.trim();
                 const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
-                
-                updates.push(handlePvChange(currentWbsId, currentDate, value, false));
+                const allocations = Array.from(selectedCells).map(cellId => {
+                    const [,,, ...dateParts] = cellId.split('-');
+                    const cellWbsId = Number(cellId.split('-')[2]);
+                    return { wbsElementId: cellWbsId, date: dateParts.join('-'), plannedValue: value };
+                });
+                await invoke('upsert_daily_allocations_bulk', { payload: { planVersionId, allocations }});
+            } else {
+                const rows = pasteData.split(/\r\n|\n|\r/);
+                const startRowIndex = activityRowIds.indexOf(startWbsId);
+                const startColIndex = dateStrs.indexOf(startDate);
+                if (startRowIndex === -1 || startColIndex === -1) return;
+
+                const allocations: { wbsElementId: number, date: string, plannedValue: number | null }[] = [];
+                for (let i = 0; i < rows.length; i++) {
+                    const rowData = rows[i].split('\t');
+                    const currentRowIndex = startRowIndex + i;
+                    if (currentRowIndex >= activityRowIds.length) break;
+                    const currentWbsId = activityRowIds[currentRowIndex];
+
+                    for (let j = 0; j < rowData.length; j++) {
+                        const currentColIndex = startColIndex + j;
+                        if (currentColIndex >= dateStrs.length) break;
+                        const currentDate = dateStrs[currentColIndex];
+                        const valueStr = rowData[j].trim();
+                        const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
+                        allocations.push({ wbsElementId: currentWbsId, date: currentDate, plannedValue: value });
+                    }
+                }
+                await invoke('upsert_daily_allocations_bulk', { payload: { planVersionId, allocations } });
             }
+            fetchAllData();
+        } catch (err) {
+            console.error("Bulk paste failed:", err);
         }
-        
-        await Promise.all(updates);
-        fetchAllData();
     },
     [activityRowIds, dateStrs, isReadOnly, handlePvChange, fetchAllData, selectedCells]
   );

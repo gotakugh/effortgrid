@@ -151,6 +151,22 @@ pub struct PvAllocation {
     pub planned_value: f64,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyAllocationBulkItem {
+    pub wbs_element_id: i64,
+    pub date: NaiveDate,
+    pub planned_value: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActualCostBulkItem {
+    pub wbs_element_id: i64,
+    pub work_date: NaiveDate,
+    pub actual_cost: Option<f64>,
+}
+
 
 // ----- DB Access Functions -----
 
@@ -372,6 +388,59 @@ pub async fn upsert_daily_allocation(
         }
         // No value and no record, nothing to do
         (None, None) => {}
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn upsert_daily_allocations_bulk(
+    pool: &SqlitePool,
+    plan_version_id: i64,
+    allocations: &[DailyAllocationBulkItem],
+) -> DbResult<()> {
+    let mut tx = pool.begin().await?;
+
+    for alloc in allocations {
+        let existing_id: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM pv_allocations WHERE plan_version_id = ? AND wbs_element_id = ? AND start_date = ?",
+        )
+        .bind(plan_version_id)
+        .bind(alloc.wbs_element_id)
+        .bind(alloc.date)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let pv_to_use = alloc.planned_value.filter(|&pv| pv > 0.0);
+
+        match (pv_to_use, existing_id) {
+            (Some(pv), Some(id)) => {
+                sqlx::query("UPDATE pv_allocations SET planned_value = ? WHERE id = ?")
+                    .bind(pv)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            (Some(pv), None) => {
+                sqlx::query(
+                    "INSERT INTO pv_allocations (plan_version_id, wbs_element_id, start_date, end_date, planned_value) VALUES (?, ?, ?, ?, ?)",
+                )
+                .bind(plan_version_id)
+                .bind(alloc.wbs_element_id)
+                .bind(alloc.date)
+                .bind(alloc.date)
+                .bind(pv)
+                .execute(&mut *tx)
+                .await?;
+            }
+            (None, Some(id)) => {
+                sqlx::query("DELETE FROM pv_allocations WHERE id = ?")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            (None, None) => {}
+        }
     }
 
     tx.commit().await?;
@@ -606,6 +675,57 @@ pub async fn upsert_actual_cost(
                 .await?;
         }
         (None, None) => {}
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn upsert_actual_costs_bulk(
+    pool: &SqlitePool,
+    user_id: i64,
+    costs: &[ActualCostBulkItem],
+) -> DbResult<()> {
+    let mut tx = pool.begin().await?;
+
+    for cost in costs {
+        let existing_id: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM actual_costs WHERE wbs_element_id = ? AND work_date = ?",
+        )
+        .bind(cost.wbs_element_id)
+        .bind(cost.work_date)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let cost_to_use = cost.actual_cost.filter(|&ac| ac > 0.0);
+
+        match (cost_to_use, existing_id) {
+            (Some(ac), Some(id)) => {
+                sqlx::query("UPDATE actual_costs SET actual_cost = ? WHERE id = ?")
+                    .bind(ac)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            (Some(ac), None) => {
+                sqlx::query(
+                    "INSERT INTO actual_costs (wbs_element_id, user_id, work_date, actual_cost) VALUES (?, ?, ?, ?)",
+                )
+                .bind(cost.wbs_element_id)
+                .bind(user_id)
+                .bind(cost.work_date)
+                .bind(ac)
+                .execute(&mut *tx)
+                .await?;
+            }
+            (None, Some(id)) => {
+                sqlx::query("DELETE FROM actual_costs WHERE id = ?")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            (None, None) => {}
+        }
     }
 
     tx.commit().await?;

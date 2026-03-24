@@ -376,56 +376,65 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     else if (key === 'ArrowLeft' && cIdx > 0) focusCell(wbsElementId, dateStrs[cIdx - 1]);
     else if (key === 'ArrowRight' && cIdx < dateStrs.length - 1) focusCell(wbsElementId, dateStrs[cIdx + 1]);
     else if (key === 'Delete' || key === 'Backspace') {
-        const updates: Promise<void>[] = [];
         const cellsToUpdate = selectedCells.size > 1 ? selectedCells : new Set([`cell-ac-${wbsElementId}-${date}`]);
-        
-        cellsToUpdate.forEach(cellId => {
+        const costs = Array.from(cellsToUpdate).map(cellId => {
             const [,,, ...dateParts] = cellId.split('-');
             const cellWbsId = Number(cellId.split('-')[2]);
-            updates.push(handleAcChange(cellWbsId, dateParts.join('-'), null, false));
+            return {
+                wbsElementId: cellWbsId,
+                workDate: dateParts.join('-'),
+                actualCost: null,
+            };
         });
-        Promise.all(updates).then(() => fetchAllData());
+        invoke('upsert_actual_costs_bulk', { payload: { costs } })
+            .then(() => fetchAllData())
+            .catch(err => console.error("Bulk delete failed:", err));
     }
   }, [activityRowIds, dateStrs, handleAcChange, selectedCells, fetchAllData]);
 
   const handleCellPaste = useCallback(async (e: React.ClipboardEvent<HTMLInputElement>, startWbsId: number, startDate: string) => {
-    e.preventDefault(); if (isReadOnly) return;
+    e.preventDefault();
+    if (isReadOnly) return;
+
     const pasteData = e.clipboardData.getData('text');
+    try {
+        if (selectedCells.size > 1 && !pasteData.includes('\t') && !pasteData.includes('\n') && !pasteData.includes('\r')) {
+            const valueStr = pasteData.trim();
+            const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
+            const costs = Array.from(selectedCells).map(cellId => {
+                const [,,, ...dateParts] = cellId.split('-');
+                const cellWbsId = Number(cellId.split('-')[2]);
+                return { wbsElementId: cellWbsId, workDate: dateParts.join('-'), actualCost: value };
+            });
+            await invoke('upsert_actual_costs_bulk', { payload: { costs } });
+        } else {
+            const rows = pasteData.split(/\r\n|\n|\r/);
+            const startRIdx = activityRowIds.indexOf(startWbsId);
+            const startCIdx = dateStrs.indexOf(startDate);
+            if (startRIdx === -1 || startCIdx === -1) return;
 
-    if (selectedCells.size > 1 && !pasteData.includes('\t') && !pasteData.includes('\n') && !pasteData.includes('\r')) {
-        const valueStr = pasteData.trim();
-        const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
-        const updates: Promise<void>[] = [];
-        selectedCells.forEach(cellId => {
-            const [,,, ...dateParts] = cellId.split('-');
-            const cellWbsId = Number(cellId.split('-')[2]);
-            updates.push(handleAcChange(cellWbsId, dateParts.join('-'), value, false));
-        });
-        await Promise.all(updates);
+            const costs: { wbsElementId: number, workDate: string, actualCost: number | null }[] = [];
+            for (let i = 0; i < rows.length; i++) {
+                const rowData = rows[i].split('\t');
+                const rIdx = startRIdx + i;
+                if (rIdx >= activityRowIds.length) break;
+                const wbsId = activityRowIds[rIdx];
+
+                for (let j = 0; j < rowData.length; j++) {
+                    const cIdx = startCIdx + j;
+                    if (cIdx >= dateStrs.length) break;
+                    const date = dateStrs[cIdx];
+                    const value = !isNaN(parseFloat(rowData[j])) ? parseFloat(rowData[j]) : null;
+                    costs.push({ wbsElementId: wbsId, workDate: date, actualCost: value });
+                }
+            }
+            await invoke('upsert_actual_costs_bulk', { payload: { costs } });
+        }
         fetchAllData();
-        return;
+    } catch (err) {
+        console.error("Bulk paste failed:", err);
     }
-
-    const rows = pasteData.split(/\r\n|\n|\r/);
-    const startRIdx = activityRowIds.indexOf(startWbsId), startCIdx = dateStrs.indexOf(startDate);
-    if (startRIdx === -1 || startCIdx === -1) return;
-
-    const updates = rows.flatMap((row, i) => {
-      const rIdx = startRIdx + i;
-      if (rIdx >= activityRowIds.length) return [];
-      const wbsId = activityRowIds[rIdx];
-      return row.split('\t').map((val, j) => {
-        const cIdx = startCIdx + j;
-        if (cIdx >= dateStrs.length) return null;
-        const date = dateStrs[cIdx];
-        const value = !isNaN(parseFloat(val)) ? parseFloat(val) : null;
-        return handleAcChange(wbsId, date, value, false);
-      });
-    }).filter(p => p !== null);
-    
-    await Promise.all(updates);
-    fetchAllData();
-  }, [activityRowIds, dateStrs, isReadOnly, handleAcChange, fetchAllData, selectedCells]);
+  }, [activityRowIds, dateStrs, isReadOnly, fetchAllData, selectedCells]);
 
   useEffect(() => {
     const handleCopy = (e: ClipboardEvent) => {

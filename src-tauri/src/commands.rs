@@ -1,6 +1,6 @@
 use crate::db::{
-    self, ActualCost, PlanMilestone, PlanVersion, Portfolio, ProgressUpdate, PvAllocation,
-    SqlitePool, User, WbsElementDetail,
+    self, ActualCost, ActualCostBulkItem, DailyAllocationBulkItem, PlanMilestone, PlanVersion,
+    Portfolio, ProgressUpdate, PvAllocation, SqlitePool, User, WbsElementDetail,
 };
 use crate::evm;
 use chrono::NaiveDate;
@@ -102,6 +102,19 @@ pub struct UpsertActualCostPayload {
     wbs_element_id: i64,
     work_date: NaiveDate,
     actual_cost: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertDailyAllocationsBulkPayload {
+    plan_version_id: i64,
+    allocations: Vec<DailyAllocationBulkItem>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertActualCostsBulkPayload {
+    costs: Vec<ActualCostBulkItem>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -286,6 +299,42 @@ async fn check_is_activity_in_draft(pool: &SqlitePool, wbs_element_id: i64) -> A
     }
 }
 
+/// Efficiently checks if a list of WBS elements are all 'Activity' types in the draft plan.
+async fn check_are_activities_in_draft(pool: &SqlitePool, wbs_element_ids: &[i64]) -> AppResult<()> {
+    if wbs_element_ids.is_empty() {
+        return Ok(());
+    }
+
+    let unique_ids: std::collections::HashSet<_> = wbs_element_ids.iter().collect();
+    if unique_ids.is_empty() {
+        return Ok(());
+    }
+
+    let params = unique_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let sql = format!(
+        "SELECT COUNT(DISTINCT wd.wbs_element_id) FROM wbs_element_details wd
+         JOIN plan_versions pv ON wd.plan_version_id = pv.id
+         WHERE wd.wbs_element_id IN ({}) AND pv.is_draft = true AND wd.element_type = 'Activity'",
+        params
+    );
+
+    let mut query = sqlx::query_scalar::<_, i64>(&sql);
+    for id in &unique_ids {
+        query = query.bind(id);
+    }
+
+    let activity_count = query.fetch_one(pool).await.map_err(db::DbError::from)?;
+
+    if activity_count as usize == unique_ids.len() {
+        Ok(())
+    } else {
+        Err(AppError::DbError(
+            "All elements must be 'Activity' types in the current draft plan.".to_string(),
+        ))
+    }
+}
+
+
 async fn check_is_activity(
     pool: &SqlitePool,
     wbs_element_id: i64,
@@ -304,6 +353,44 @@ async fn check_is_activity(
     } else {
         Err(AppError::DbError(
             "PV allocations can only be managed for 'Activity' elements.".to_string(),
+        ))
+    }
+}
+
+/// Efficiently checks if a list of WBS elements are all 'Activity' types for a given plan version.
+async fn check_are_activities(
+    pool: &SqlitePool,
+    wbs_element_ids: &[i64],
+    plan_version_id: i64,
+) -> AppResult<()> {
+    if wbs_element_ids.is_empty() {
+        return Ok(());
+    }
+
+    let unique_ids: std::collections::HashSet<_> = wbs_element_ids.iter().collect();
+     if unique_ids.is_empty() {
+        return Ok(());
+    }
+
+    let params = unique_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let sql = format!(
+        "SELECT COUNT(DISTINCT wbs_element_id) FROM wbs_element_details WHERE wbs_element_id IN ({}) AND plan_version_id = ? AND element_type = 'Activity'",
+        params
+    );
+
+    let mut query = sqlx::query_scalar::<_, i64>(&sql);
+    for id in &unique_ids {
+        query = query.bind(id);
+    }
+    query = query.bind(plan_version_id);
+
+    let activity_count = query.fetch_one(pool).await.map_err(db::DbError::from)?;
+
+    if activity_count as usize == unique_ids.len() {
+        Ok(())
+    } else {
+        Err(AppError::DbError(
+            "All elements must be 'Activity' types for the given plan version.".to_string(),
         ))
     }
 }
@@ -385,6 +472,18 @@ pub async fn upsert_daily_allocation(
 }
 
 #[tauri::command]
+pub async fn upsert_daily_allocations_bulk(
+    pool: State<'_, SqlitePool>,
+    payload: UpsertDailyAllocationsBulkPayload,
+) -> AppResult<()> {
+    let wbs_ids: Vec<i64> = payload.allocations.iter().map(|a| a.wbs_element_id).collect();
+    check_are_activities(&pool, &wbs_ids, payload.plan_version_id).await?;
+
+    db::upsert_daily_allocations_bulk(&pool, payload.plan_version_id, &payload.allocations).await?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn create_baseline(
     pool: State<'_, SqlitePool>,
     payload: CreateBaselinePayload,
@@ -424,6 +523,20 @@ pub async fn upsert_actual_cost(
         payload.actual_cost,
     )
     .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn upsert_actual_costs_bulk(
+    pool: State<'_, SqlitePool>,
+    payload: UpsertActualCostsBulkPayload,
+) -> AppResult<()> {
+    let wbs_ids: Vec<i64> = payload.costs.iter().map(|c| c.wbs_element_id).collect();
+    check_are_activities_in_draft(&pool, &wbs_ids).await?;
+
+    // For now, hardcode user_id as 1. User management is out of scope.
+    let user_id = 1;
+    db::upsert_actual_costs_bulk(&pool, user_id, &payload.costs).await?;
     Ok(())
 }
 
