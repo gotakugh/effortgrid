@@ -145,6 +145,12 @@ const GridRow = ({
   const userMap = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
   const assignedUsers = useMemo(() => assignedUsersMap[node.wbsElementId] || new Set(), [assignedUsersMap, node.wbsElementId]);
   
+  const hasUnassignedPv = useMemo(() => {
+    const unassignedAllocs = allocations[node.wbsElementId]?.[0];
+    if (!unassignedAllocs) return false;
+    return Object.values(unassignedAllocs).some(alloc => alloc.pv > 0);
+  }, [allocations, node.wbsElementId]);
+
   const getRollupValue = (date: string): number => {
     const getIds = (n: TreeNode): number[] => [n.wbsElementId, ...n.children.flatMap(getIds)];
     const descendantIds = getIds(node);
@@ -179,7 +185,17 @@ const GridRow = ({
     }, 0);
   };
   
-  const usersToRender = useMemo(() => Array.from(assignedUsers).sort((a, b) => a - b), [assignedUsers]);
+  const usersToRender = useMemo(() => {
+    const userIds = Array.from(assignedUsers);
+    if (hasUnassignedPv && !userIds.includes(0)) {
+        userIds.push(0);
+    }
+    return userIds.sort((a, b) => {
+        if (a === 0) return -1; // Unassigned always first
+        if (b === 0) return 1;
+        return a - b;
+    });
+  }, [assignedUsers, hasUnassignedPv]);
   const availableUsers = useMemo(() => users.filter(u => !assignedUsers.has(u.id)), [users, assignedUsers]);
 
   return (
@@ -223,12 +239,13 @@ const GridRow = ({
       {/* User rows for Activities */}
       {isActivity && usersToRender.map(userId => {
         const user = userMap.get(userId);
+        const isUnassigned = userId === 0;
         return (
           <Table.Tr key={`${node.wbsElementId}-${userId}`}>
             <Table.Td className={classes.sticky_col}>
               <Group gap="xs" style={{ paddingLeft: (level * 20) + 30 }}>
-                <Avatar size="sm" color="cyan">{user?.name.substring(0,2)}</Avatar>
-                <Text size="xs">{user?.name || `User ${userId}`}</Text>
+                <Avatar size="sm" color={isUnassigned ? 'gray' : 'cyan'}>{isUnassigned ? '?' : user?.name.substring(0,2)}</Avatar>
+                <Text size="xs">{isUnassigned ? 'Unassigned' : (user?.name || `User ${userId}`)}</Text>
               </Group>
             </Table.Td>
             {days.map((day) => {
@@ -524,10 +541,9 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
   const handleAddUserToActivity = (wbsElementId: number, userId: number) => {
     setAssignedUsers(prev => {
       const newAssigned = { ...prev };
-      if (!newAssigned[wbsElementId]) {
-        newAssigned[wbsElementId] = new Set();
-      }
-      newAssigned[wbsElementId].add(userId);
+      const newSet = new Set(newAssigned[wbsElementId]); // Copy existing set or create new
+      newSet.add(userId);
+      newAssigned[wbsElementId] = newSet;
       return newAssigned;
     });
   };

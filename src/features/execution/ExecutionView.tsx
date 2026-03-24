@@ -93,6 +93,12 @@ const GridRow = ({
   const userMap = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
   const assignedUsers = useMemo(() => assignedUsersMap[node.wbsElementId] || new Set(), [assignedUsersMap, node.wbsElementId]);
 
+  const hasUnassignedPv = useMemo(() => {
+    const unassignedData = data[node.wbsElementId]?.[0];
+    if (!unassignedData) return false;
+    return Object.values(unassignedData).some(d => d.pv && d.pv > 0);
+  }, [data, node.wbsElementId]);
+
   const getRollupValue = (date: string, type: 'pv' | 'ac'): number => {
     const getIds = (n: TreeNode): number[] => [n.wbsElementId, ...n.children.flatMap(getIds)];
     const descendantIds = getIds(node);
@@ -129,7 +135,17 @@ const GridRow = ({
     }, 0);
   };
 
-  const usersToRender = useMemo(() => Array.from(assignedUsers).sort((a, b) => a - b), [assignedUsers]);
+  const usersToRender = useMemo(() => {
+    const userIds = Array.from(assignedUsers);
+    if (hasUnassignedPv && !userIds.includes(0)) {
+        userIds.push(0);
+    }
+    return userIds.sort((a, b) => {
+        if (a === 0) return -1; // Unassigned always first
+        if (b === 0) return 1;
+        return a - b;
+    });
+  }, [assignedUsers, hasUnassignedPv]);
   const availableUsers = useMemo(() => users.filter(u => !assignedUsers.has(u.id)), [users, assignedUsers]);
 
   return (
@@ -186,13 +202,17 @@ const GridRow = ({
       {/* User Rows */}
       {isActivity && usersToRender.map((userId, index) => {
         const user = userMap.get(userId);
+        const isUnassigned = userId === 0;
         const isLastUser = index === usersToRender.length - 1;
         return (
           <React.Fragment key={userId}>
             {/* User PV Row */}
             <Table.Tr>
               <Table.Td rowSpan={2} className={classes.sticky_col} style={{ verticalAlign: 'middle', borderBottom: isLastUser ? '1px solid var(--mantine-color-gray-3)' : 'none' }}>
-                <Group gap="xs" style={{ paddingLeft: (level * 20) + 30 }}><Avatar size="sm">{user?.name.substring(0,2)}</Avatar><Text size="xs">{user?.name}</Text></Group>
+                <Group gap="xs" style={{ paddingLeft: (level * 20) + 30 }}>
+                  <Avatar size="sm" color={isUnassigned ? 'gray' : 'blue'}>{isUnassigned ? '?' : user?.name.substring(0,2)}</Avatar>
+                  <Text size="xs">{isUnassigned ? 'Unassigned' : user?.name}</Text>
+                </Group>
               </Table.Td>
               {days.map(day => (
                 <Table.Td key={`${day.format()}-pv`} className={classes.data_cell} style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
@@ -214,7 +234,7 @@ const GridRow = ({
                       wbsElementId={node.wbsElementId} userId={userId} date={dateStr}
                       initialAc={data[node.wbsElementId]?.[userId]?.[dateStr]?.ac?.value}
                       onCommit={(value) => onAcChange(node.wbsElementId, userId, dateStr, value)}
-                      isReadOnly={isReadOnly}
+                      isReadOnly={isReadOnly || isUnassigned}
                       onKeyDown={onCellKeyDown} onPaste={onCellPaste}
                       onMouseDown={(e) => onCellMouseDown(e, node.wbsElementId, userId, dateStr)}
                       onMouseOver={() => onCellMouseOver(node.wbsElementId, userId, dateStr)}
@@ -400,10 +420,9 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
   const handleAddUserToActivity = (wbsElementId: number, userId: number) => {
     setAssignedUsers(prev => {
       const newAssigned = { ...prev };
-      if (!newAssigned[wbsElementId]) {
-        newAssigned[wbsElementId] = new Set();
-      }
-      newAssigned[wbsElementId].add(userId);
+      const newSet = new Set(newAssigned[wbsElementId]); // Copy existing set or create new
+      newSet.add(userId);
+      newAssigned[wbsElementId] = newSet;
       return newAssigned;
     });
   };
