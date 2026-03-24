@@ -86,6 +86,29 @@ pub struct WbsElementDetail {
 
 #[derive(Debug, Serialize, FromRow, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ActualCost {
+    pub id: i64,
+    pub wbs_element_id: i64,
+    pub user_id: i64,
+    pub work_date: NaiveDate,
+    pub actual_cost: f64,
+    pub is_deleted: bool,
+}
+
+#[derive(Debug, Serialize, FromRow, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProgressUpdate {
+    pub id: i64,
+    pub wbs_element_id: i64,
+    pub reported_by_user_id: i64,
+    pub report_date: NaiveDate,
+    pub progress_percent: f64,
+    pub notes: Option<String>,
+    pub is_deleted: bool,
+}
+
+#[derive(Debug, Serialize, FromRow, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PvAllocation {
     pub id: i64,
     pub plan_version_id: i64,
@@ -467,4 +490,86 @@ pub async fn create_baseline(pool: &SqlitePool, project_id: i64, baseline_name: 
     tx.commit().await?;
 
     Ok(new_version)
+}
+
+// ----- Execution: Actual Costs (AC) -----
+
+pub async fn add_actual_cost(
+    pool: &SqlitePool,
+    wbs_element_id: i64,
+    user_id: i64,
+    work_date: NaiveDate,
+    actual_cost: f64,
+) -> DbResult<ActualCost> {
+    let id = sqlx::query(
+        "INSERT INTO actual_costs (wbs_element_id, user_id, work_date, actual_cost) VALUES (?, ?, ?, ?)",
+    )
+    .bind(wbs_element_id)
+    .bind(user_id)
+    .bind(work_date)
+    .bind(actual_cost)
+    .execute(pool)
+    .await?
+    .last_insert_rowid();
+
+    let record = sqlx::query_as("SELECT * FROM actual_costs WHERE id = ?")
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+    Ok(record)
+}
+
+pub async fn get_actual_costs_for_element(
+    pool: &SqlitePool,
+    wbs_element_id: i64,
+) -> DbResult<Vec<ActualCost>> {
+    let records = sqlx::query_as(
+        "SELECT * FROM actual_costs WHERE wbs_element_id = ? AND is_deleted = false ORDER BY work_date DESC",
+    )
+    .bind(wbs_element_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(records)
+}
+
+// ----- Execution: Progress Updates (EV) -----
+
+pub async fn add_progress_update(
+    pool: &SqlitePool,
+    wbs_element_id: i64,
+    reported_by_user_id: i64,
+    report_date: NaiveDate,
+    progress_percent: f64,
+    notes: Option<&str>,
+) -> DbResult<ProgressUpdate> {
+    let id = sqlx::query(
+        "INSERT INTO progress_updates (wbs_element_id, reported_by_user_id, report_date, progress_percent, notes) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(wbs_element_id)
+    .bind(reported_by_user_id)
+    .bind(report_date)
+    .bind(progress_percent)
+    .bind(notes)
+    .execute(pool)
+    .await?
+    .last_insert_rowid();
+
+    let record = sqlx::query_as("SELECT * FROM progress_updates WHERE id = ?")
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+    Ok(record)
+}
+
+pub async fn get_progress_updates_for_element(
+    pool: &SqlitePool,
+    wbs_element_id: i64,
+) -> DbResult<Vec<ProgressUpdate>> {
+    let records = sqlx::query_as(
+        "SELECT * FROM progress_updates WHERE wbs_element_id = ? AND is_deleted = false ORDER BY report_date DESC",
+    )
+    .bind(wbs_element_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(records)
 }

@@ -38,3 +38,22 @@ export interface PvAllocation {
   endDate: string; // "YYYY-MM-DD"
   plannedValue: number;
 }
+
+export interface ActualCost {
+  id: number;
+  wbsElementId: number;
+  userId: number;
+  workDate: string; // "YYYY-MM-DD"
+  actualCost: number;
+  isDeleted: boolean;
+}
+
+export interface ProgressUpdate {
+  id: number;
+  wbsElementId: number;
+  reportedByUserId: number;
+  reportDate: string; // "YYYY-MM-DD"
+  progressPercent: number;
+  notes: string | null;
+  isDeleted: boolean;
+}

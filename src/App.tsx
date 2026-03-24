@@ -16,7 +16,7 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { useForm, zodResolver } from '@mantine/form';
 import { z } from 'zod';
-import { IconPlus, IconTree, IconLayoutDashboard, IconCalendarStats, IconDeviceFloppy } from '@tabler/icons-react';
+import { IconPlus, IconTree, IconLayoutDashboard, IconCalendarStats, IconDeviceFloppy, IconBriefcase } from '@tabler/icons-react';
 import { Project, PlanVersion } from './types';
 import { WbsListView } from './features/wbs/WbsListView';
 import { AllocationGrid } from './features/allocations/AllocationGrid';
@@ -230,6 +230,13 @@ function App() {
             active={activeView === 'allocations'}
             onClick={() => setActiveView('allocations')}
           />
+          <NavLink
+            href="#"
+            label="Execution (Actuals/EV)"
+            leftSection={<IconBriefcase size="1rem" />}
+            active={activeView === 'execution'}
+            onClick={() => setActiveView('execution')}
+          />
           {/* ... other nav links from UI_DESIGN.md */}
           <Button onClick={openCreateModal} fullWidth leftSection={<IconPlus size={14} />} mt="xl">
             New Project
@@ -239,6 +246,7 @@ function App() {
         <AppShell.Main>
           {activeView === 'wbs' && <WbsListView planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} isReadOnly={isReadOnly} />}
           {activeView === 'allocations' && <AllocationGrid planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} isReadOnly={isReadOnly} />}
+          {activeView === 'execution' && <ExecutionView planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} isReadOnly={isReadOnly} />}
         </AppShell.Main>
       </AppShell>
     </>

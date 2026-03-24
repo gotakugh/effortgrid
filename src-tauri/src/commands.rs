@@ -1,4 +1,4 @@
-use crate::db::{self, PlanVersion, Project, PvAllocation, SqlitePool, WbsElementDetail};
+use crate::db::{self, ActualCost, PlanVersion, ProgressUpdate, Project, PvAllocation, SqlitePool, WbsElementDetail};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -99,6 +99,23 @@ pub struct CreateBaselinePayload {
     baseline_name: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddActualCostPayload {
+    wbs_element_id: i64,
+    work_date: NaiveDate,
+    actual_cost: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddProgressUpdatePayload {
+    wbs_element_id: i64,
+    report_date: NaiveDate,
+    progress_percent: f64,
+    notes: Option<String>,
+}
+
 
 // ----- Tauri Commands -----
 
@@ -193,6 +210,39 @@ pub async fn list_pv_allocations_for_wbs_element(
     )
     .await?;
     Ok(allocations)
+}
+
+/// Checks if a WBS element is an 'Activity' in the project's current draft plan.
+async fn check_is_activity_in_draft(pool: &SqlitePool, wbs_element_id: i64) -> AppResult<()> {
+    let (project_id,): (i64,) = sqlx::query_as("SELECT project_id FROM wbs_elements WHERE id = ?")
+        .bind(wbs_element_id)
+        .fetch_one(pool)
+        .await
+        .map_err(db::DbError::from)?;
+
+    let (draft_plan_id,): (i64,) =
+        sqlx::query_as("SELECT id FROM plan_versions WHERE project_id = ? AND is_draft = true")
+            .bind(project_id)
+            .fetch_one(pool)
+            .await
+            .map_err(db::DbError::from)?;
+
+    let (element_type,): (String,) = sqlx::query_as(
+        "SELECT element_type FROM wbs_element_details WHERE wbs_element_id = ? AND plan_version_id = ?",
+    )
+    .bind(wbs_element_id)
+    .bind(draft_plan_id)
+    .fetch_one(pool)
+    .await
+    .map_err(db::DbError::from)?;
+
+    if element_type == "Activity" {
+        Ok(())
+    } else {
+        Err(AppError::DbError(
+            "Actual costs and progress can only be reported for 'Activity' elements.".to_string(),
+        ))
+    }
 }
 
 async fn check_is_activity(
@@ -301,4 +351,56 @@ pub async fn create_baseline(
     let new_baseline =
         db::create_baseline(&pool, payload.project_id, &payload.baseline_name).await?;
     Ok(new_baseline)
+}
+
+#[tauri::command]
+pub async fn add_actual_cost(
+    pool: State<'_, SqlitePool>,
+    payload: AddActualCostPayload,
+) -> AppResult<ActualCost> {
+    check_is_activity_in_draft(&pool, payload.wbs_element_id).await?;
+    // For now, hardcode user_id as 1. User management is out of scope.
+    let user_id = 1;
+    let record =
+        db::add_actual_cost(&pool, payload.wbs_element_id, user_id, payload.work_date, payload.actual_cost)
+            .await?;
+    Ok(record)
+}
+
+#[tauri::command]
+pub async fn get_actual_costs_for_element(
+    pool: State<'_, SqlitePool>,
+    wbs_element_id: i64,
+) -> AppResult<Vec<ActualCost>> {
+    let records = db::get_actual_costs_for_element(&pool, wbs_element_id).await?;
+    Ok(records)
+}
+
+#[tauri::command]
+pub async fn add_progress_update(
+    pool: State<'_, SqlitePool>,
+    payload: AddProgressUpdatePayload,
+) -> AppResult<ProgressUpdate> {
+    check_is_activity_in_draft(&pool, payload.wbs_element_id).await?;
+    // For now, hardcode user_id as 1.
+    let user_id = 1;
+    let record = db::add_progress_update(
+        &pool,
+        payload.wbs_element_id,
+        user_id,
+        payload.report_date,
+        payload.progress_percent,
+        payload.notes.as_deref(),
+    )
+    .await?;
+    Ok(record)
+}
+
+#[tauri::command]
+pub async fn get_progress_updates_for_element(
+    pool: State<'_, SqlitePool>,
+    wbs_element_id: i64,
+) -> AppResult<Vec<ProgressUpdate>> {
+    let records = db::get_progress_updates_for_element(&pool, wbs_element_id).await?;
+    Ok(records)
 }

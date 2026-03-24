@@ -34,7 +34,11 @@ pub fn run() {
             commands::delete_pv_allocation,
             commands::list_allocations_for_period,
             commands::upsert_daily_allocation,
-            commands::create_baseline
+            commands::create_baseline,
+            commands::add_actual_cost,
+            commands::get_actual_costs_for_element,
+            commands::add_progress_update,
+            commands::get_progress_updates_for_element
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
