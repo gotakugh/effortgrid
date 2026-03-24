@@ -40,6 +40,13 @@ pub struct AddWbsElementPayload {
     tags: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateWbsElementPvPayload {
+    id: i64,
+    estimated_pv: Option<f64>,
+}
+
 // ----- Tauri Commands -----
 
 #[tauri::command]
@@ -96,4 +103,27 @@ pub async fn list_plan_versions_for_project(
 ) -> AppResult<Vec<PlanVersion>> {
     let versions = db::list_plan_versions_for_project(&pool, project_id).await?;
     Ok(versions)
+}
+
+#[tauri::command]
+pub async fn update_wbs_element_pv(
+    pool: State<'_, SqlitePool>,
+    payload: UpdateWbsElementPvPayload,
+) -> AppResult<()> {
+    // ARCHITECTURE.md: "末端入力の原則" を適用
+    let element_type: String =
+        sqlx::query_scalar("SELECT element_type FROM wbs_element_details WHERE id = ?")
+            .bind(payload.id)
+            .fetch_one(&*pool)
+            .await
+            .map_err(db::DbError::from)?;
+
+    if element_type != "Activity" {
+        return Err(AppError::DbError(
+            "PV can only be estimated for 'Activity' elements.".to_string(),
+        ));
+    }
+
+    db::update_wbs_element_pv(&pool, payload.id, payload.estimated_pv).await?;
+    Ok(())
 }

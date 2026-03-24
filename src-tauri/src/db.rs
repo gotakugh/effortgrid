@@ -77,7 +77,6 @@ pub struct WbsElementDetail {
     pub milestone_id: Option<i64>,
     pub title: String,
     pub description: Option<String>,
-    #[sqlx(json)]
     pub element_type: WbsElementType,
     pub estimated_pv: Option<f64>,
     pub tags: Option<String>,
@@ -219,4 +218,20 @@ pub async fn list_plan_versions_for_project(
     .fetch_all(pool)
     .await?;
     Ok(versions)
+}
+
+/// WBS要素の見積もりPVを更新します。
+pub async fn update_wbs_element_pv(
+    pool: &SqlitePool,
+    id: i64, // This is wbs_element_details.id
+    estimated_pv: Option<f64>,
+) -> DbResult<u64> {
+    let rows_affected = sqlx::query("UPDATE wbs_element_details SET estimated_pv = ? WHERE id = ?")
+        .bind(estimated_pv)
+        .bind(id)
+        .execute(pool)
+        .await?
+        .rows_affected();
+
+    Ok(rows_affected)
 }
