@@ -1,4 +1,4 @@
-use crate::db::{self, DbResult, SqlitePool};
+use crate::db::{DbResult, SqlitePool};
 use chrono::{Datelike, Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, QueryBuilder, Sqlite};

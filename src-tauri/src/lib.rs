@@ -23,11 +23,11 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
-            commands::create_project,
+            commands::create_portfolio,
             commands::add_wbs_element,
             commands::list_wbs_elements,
-            commands::list_projects,
-            commands::list_plan_versions_for_project,
+            commands::list_portfolios,
+            commands::list_plan_versions_for_portfolio,
             commands::update_wbs_element_pv,
             commands::list_pv_allocations_for_wbs_element,
             commands::add_pv_allocation,
