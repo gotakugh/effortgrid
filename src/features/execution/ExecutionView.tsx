@@ -1,11 +1,12 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
-  Group, Title, Text, Table, NumberInput, Badge, Box, Loader, Center, Alert, Stack, ActionIcon,
+  Group, Title, Text, Table, NumberInput, Badge, Box, Loader, Center, Alert, Stack, ActionIcon, Menu, Avatar, Tooltip, rem,
 } from '@mantine/core';
 import { MonthPickerInput } from '@mantine/dates';
-import { IconChevronLeft, IconChevronRight, IconAlertCircle } from '@tabler/icons-react';
-import { WbsElementDetail, WbsElementType, PvAllocation, ActualCost, ExecutionData } from '../../types';
+import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus } from '@tabler/icons-react';
+import { WbsElementDetail, WbsElementType, PvAllocation, ActualCost, ExecutionData, User } from '../../types';
+import { useUsers } from '../../hooks/useUsers';
 import dayjs from 'dayjs';
 import classes from './ExecutionView.module.css';
 
@@ -15,7 +16,9 @@ interface TreeNode extends WbsElementDetail {
 }
 interface ExecutionMap {
   [wbsElementId: number]: {
-    [date: string]: { pv?: number; ac?: { id: number; value: number } };
+    [userId: number]: { // 0 for unassigned PV
+      [date: string]: { pv?: number; ac?: { id: number; value: number } };
+    };
   };
 }
 interface GridProps {
@@ -26,11 +29,11 @@ interface GridProps {
 const getBadgeColor = (type: WbsElementType) => ({ Project: 'blue', WorkPackage: 'cyan', Activity: 'teal' }[type] || 'gray');
 
 // --- Sub-components ---
-const AcInputCell = ({ wbsElementId, date, initialAc, onCommit, isReadOnly, onKeyDown, onPaste, onMouseDown, onMouseOver, isSelected }: {
-  wbsElementId: number; date: string; initialAc?: number; isReadOnly: boolean;
+const AcInputCell = ({ wbsElementId, userId, date, initialAc, onCommit, isReadOnly, onKeyDown, onPaste, onMouseDown, onMouseOver, isSelected }: {
+  wbsElementId: number; userId: number; date: string; initialAc?: number; isReadOnly: boolean;
   onCommit: (value: number | null) => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
-  onPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => void;
+  onPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => void;
   onMouseDown: (e: React.MouseEvent<HTMLInputElement>) => void;
   onMouseOver: () => void;
   isSelected: boolean;
@@ -46,7 +49,7 @@ const AcInputCell = ({ wbsElementId, date, initialAc, onCommit, isReadOnly, onKe
 
   return (
     <NumberInput
-      id={`cell-ac-${wbsElementId}-${date}`}
+      id={`cell-ac-${wbsElementId}-${userId}-${date}`}
       classNames={{ input: classes.ac_input }}
       style={{
         backgroundColor: isSelected ? 'var(--mantine-color-blue-light)' : 'transparent',
@@ -208,9 +211,11 @@ const GridRow = ({ node, level, days, data, allElements, onAcChange, isReadOnly,
 
 // --- Main Component ---
 export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
+  const { users } = useUsers();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [elements, setElements] = useState<WbsElementDetail[]>([]);
   const [executionData, setExecutionData] = useState<ExecutionMap>({});
+  const [assignedUsers, setAssignedUsers] = useState<{ [wbsId: number]: Set<number> }>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
@@ -231,7 +236,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
 
   const fetchAllData = useCallback(async () => {
     if (!planVersionId) {
-      setElements([]); setExecutionData({}); return;
+      setElements([]); setExecutionData({}); setAssignedUsers({}); return;
     }
     setIsLoading(true); setError(null);
     const start = daysInMonth[0].format('YYYY-MM-DD');
@@ -245,16 +250,43 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
       setElements(wbs);
 
       const execMap: ExecutionMap = {};
-      const process = (item: PvAllocation | ActualCost, type: 'pv' | 'ac') => {
-        const date = 'startDate' in item ? item.startDate : item.workDate;
-        if (!execMap[item.wbsElementId]) execMap[item.wbsElementId] = {};
-        if (!execMap[item.wbsElementId][date]) execMap[item.wbsElementId][date] = {};
-        if (type === 'pv') execMap[item.wbsElementId][date].pv = (item as PvAllocation).plannedValue;
-        if (type === 'ac') execMap[item.wbsElementId][date].ac = { id: item.id, value: (item as ActualCost).actualCost };
+      const initialAssigned: { [wbsId: number]: Set<number> } = {};
+
+      const ensurePath = (wbsId: number, userId: number, date: string) => {
+        if (!execMap[wbsId]) execMap[wbsId] = {};
+        if (!execMap[wbsId][userId]) execMap[wbsId][userId] = {};
+        if (!execMap[wbsId][userId][date]) execMap[wbsId][userId][date] = {};
       };
-      data.pvAllocations.forEach(p => process(p, 'pv'));
-      data.actualCosts.forEach(a => process(a, 'ac'));
+      
+      const addAssignedUser = (wbsId: number, userId: number) => {
+          if (!initialAssigned[wbsId]) initialAssigned[wbsId] = new Set();
+          initialAssigned[wbsId].add(userId);
+      };
+
+      for (const pv of data.pvAllocations) {
+          const userId = pv.userId ?? 0;
+          ensurePath(pv.wbsElementId, userId, pv.startDate);
+          execMap[pv.wbsElementId][userId][pv.startDate].pv = pv.plannedValue;
+          if (pv.userId) addAssignedUser(pv.wbsElementId, pv.userId);
+      }
+      for (const ac of data.actualCosts) {
+          ensurePath(ac.wbsElementId, ac.userId, ac.workDate);
+          execMap[ac.wbsElementId][ac.userId][ac.workDate].ac = { id: ac.id, value: ac.actualCost };
+          addAssignedUser(ac.wbsElementId, ac.userId);
+      }
+
       setExecutionData(execMap);
+      setAssignedUsers(prev => {
+        const newAssigned = { ...initialAssigned };
+        for (const wbsId in prev) {
+          if (newAssigned[wbsId]) {
+            prev[wbsId].forEach(userId => newAssigned[wbsId].add(userId));
+          } else {
+            newAssigned[wbsId] = prev[wbsId];
+          }
+        }
+        return newAssigned;
+      });
     } catch (err: any) {
       console.error('Failed to fetch data:', err); setError(`Failed to load data. Check console.`);
     } finally {
@@ -283,19 +315,26 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
   }, [elements]);
 
   const { activityRowIds, dateStrs } = useMemo(() => {
+    const rowIdTuples: { wbsId: number, userId: number }[] = [];
     const activities: WbsElementDetail[] = [];
     const traverse = (nodes: TreeNode[]) => {
       for (const node of nodes) {
-        if (node.elementType === 'Activity') activities.push(node);
+        if (node.elementType === 'Activity') {
+          activities.push(node);
+          const usersForActivity = Array.from(assignedUsers[node.wbsElementId] || []);
+          usersForActivity.sort((a,b) => a - b).forEach(userId => {
+            rowIdTuples.push({ wbsId: node.wbsElementId, userId });
+          });
+        }
         if (node.children) traverse(node.children);
       }
     };
     traverse(tree);
     return {
-      activityRowIds: activities.map(a => a.wbsElementId),
+      activityRowIds: rowIdTuples,
       dateStrs: daysInMonth.map(d => d.format('YYYY-MM-DD'))
     };
-  }, [tree, daysInMonth]);
+  }, [tree, daysInMonth, assignedUsers]);
 
   const handleAcChange = useCallback(async (wbsElementId: number, date: string, value: number | null, shouldRefetch = true) => {
     if (isReadOnly) return;

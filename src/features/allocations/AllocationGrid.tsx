@@ -13,10 +13,15 @@ import {
   Center,
   Alert,
   Stack,
+  Menu,
+  Avatar,
+  Tooltip,
+  rem,
 } from '@mantine/core';
 import { MonthPickerInput } from '@mantine/dates';
-import { IconChevronLeft, IconChevronRight, IconAlertCircle } from '@tabler/icons-react';
-import { WbsElementDetail, WbsElementType, PvAllocation } from '../../types';
+import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus } from '@tabler/icons-react';
+import { WbsElementDetail, WbsElementType, PvAllocation, User } from '../../types';
+import { useUsers } from '../../hooks/useUsers';
 import dayjs from 'dayjs';
 import classes from './AllocationGrid.module.css';
 
@@ -27,7 +32,9 @@ interface TreeNode extends WbsElementDetail {
 
 interface AllocationMap {
   [wbsElementId: number]: {
-    [date: string]: { id: number; pv: number };
+    [userId: number]: { // 0 for unassigned
+      [date: string]: { id: number; pv: number };
+    };
   };
 }
 
@@ -51,6 +58,7 @@ const getBadgeColor = (type: WbsElementType) => {
 // A stateful component to manage each editable cell, fixing issues with defaultValue.
 const PvInputCell = ({
   wbsElementId,
+  userId,
   date,
   initialValue,
   onCommit,
@@ -62,6 +70,7 @@ const PvInputCell = ({
   isSelected,
 }: {
   wbsElementId: number;
+  userId: number;
   date: string;
   initialValue?: number;
   onCommit: (value: number | null) => void;
@@ -88,7 +97,7 @@ const PvInputCell = ({
 
   return (
     <NumberInput
-      id={`cell-pv-${wbsElementId}-${date}`}
+      id={`cell-pv-${wbsElementId}-${userId}-${date}`}
       classNames={{ input: classes.pv_input }}
       value={value}
       onChange={setValue}
@@ -232,9 +241,11 @@ const GridRow = ({
 
 // --- Main Component ---
 export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
+  const { users } = useUsers();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [elements, setElements] = useState<WbsElementDetail[]>([]);
   const [allocations, setAllocations] = useState<AllocationMap>({});
+  const [assignedUsers, setAssignedUsers] = useState<{ [wbsId: number]: Set<number> }>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
@@ -263,6 +274,7 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
     if (!planVersionId) {
       setElements([]);
       setAllocations({});
+      setAssignedUsers({});
       return;
     }
     setIsLoading(true);
@@ -281,13 +293,38 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
       setElements(wbs);
 
       const allocMap: AllocationMap = {};
+      const initialAssigned: { [wbsId: number]: Set<number> } = {};
+
       for (const alloc of allocs) {
+        const userId = alloc.userId ?? 0;
         if (!allocMap[alloc.wbsElementId]) {
           allocMap[alloc.wbsElementId] = {};
         }
-        allocMap[alloc.wbsElementId][alloc.startDate] = { id: alloc.id, pv: alloc.plannedValue };
+        if (!allocMap[alloc.wbsElementId][userId]) {
+          allocMap[alloc.wbsElementId][userId] = {};
+        }
+        allocMap[alloc.wbsElementId][userId][alloc.startDate] = { id: alloc.id, pv: alloc.plannedValue };
+        
+        if (alloc.userId) {
+            if (!initialAssigned[alloc.wbsElementId]) {
+                initialAssigned[alloc.wbsElementId] = new Set();
+            }
+            initialAssigned[alloc.wbsElementId].add(alloc.userId);
+        }
       }
       setAllocations(allocMap);
+      // Keep existing assigned users if they're not in the new data, so manually added rows don't disappear on fetch
+      setAssignedUsers(prev => {
+        const newAssigned = { ...initialAssigned };
+        for (const wbsId in prev) {
+          if (newAssigned[wbsId]) {
+            prev[wbsId].forEach(userId => newAssigned[wbsId].add(userId));
+          } else {
+            newAssigned[wbsId] = prev[wbsId];
+          }
+        }
+        return newAssigned;
+      });
     } catch (err: any) {
       console.error('Failed to fetch data:', err);
       setError(`Failed to load allocation data. Check console for details.`);
@@ -319,25 +356,27 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
   }, [elements]);
 
   const { activityRowIds, dateStrs } = useMemo(() => {
+    const rowIdTuples: { wbsId: number, userId: number }[] = [];
     const activities: WbsElementDetail[] = [];
     const traverse = (nodes: TreeNode[]) => {
-        for (const node of nodes) {
-            if (node.elementType === 'Activity') {
-                activities.push(node);
-            }
-            if (node.children) {
-                traverse(node.children);
-            }
+      for (const node of nodes) {
+        if (node.elementType === 'Activity') {
+          activities.push(node);
+          const usersForActivity = Array.from(assignedUsers[node.wbsElementId] || []);
+          usersForActivity.sort((a,b) => a - b).forEach(userId => {
+            rowIdTuples.push({ wbsId: node.wbsElementId, userId });
+          });
         }
+        if (node.children) traverse(node.children);
+      }
     };
     traverse(tree);
-    const ids = activities.map(a => a.wbsElementId);
     const dates = daysInMonth.map(d => d.format('YYYY-MM-DD'));
-    return { activityRowIds: ids, dateStrs: dates };
-  }, [tree, daysInMonth]);
+    return { activityRowIds: rowIdTuples, dateStrs: dates };
+  }, [tree, daysInMonth, assignedUsers]);
 
-  const focusCell = (wbsElementId: number, date: string) => {
-    const cell = document.getElementById(`cell-pv-${wbsElementId}-${date}`);
+  const focusCell = (wbsElementId: number, userId: number, date: string) => {
+    const cell = document.getElementById(`cell-pv-${wbsElementId}-${userId}-${date}`);
     cell?.focus();
   };
 
