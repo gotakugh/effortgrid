@@ -16,12 +16,13 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { useForm, zodResolver } from '@mantine/form';
 import { z } from 'zod';
-import { IconPlus, IconTree, IconLayoutDashboard, IconCalendarStats, IconDeviceFloppy, IconBriefcase } from '@tabler/icons-react';
+import { IconPlus, IconTree, IconLayoutDashboard, IconCalendarStats, IconDeviceFloppy, IconBriefcase, IconUsers } from '@tabler/icons-react';
 import { Portfolio, PlanVersion } from './types';
 import { WbsListView } from './features/wbs/WbsListView';
 import { AllocationGrid } from './features/allocations/AllocationGrid';
 import { ExecutionView } from './features/execution/ExecutionView';
 import { DashboardView } from './features/dashboard/DashboardView';
+import { UserManagementView } from './features/users/UserManagementView';
 
 const createPortfolioSchema = z.object({
   name: z.string().min(1, { message: 'Portfolio name is required' }),
@@ -245,6 +246,13 @@ function App() {
             active={activeView === 'execution'}
             onClick={() => setActiveView('execution')}
           />
+          <NavLink
+            href="#"
+            label="User Management"
+            leftSection={<IconUsers size="1rem" />}
+            active={activeView === 'users'}
+            onClick={() => setActiveView('users')}
+          />
           {/* ... other nav links from UI_DESIGN.md */}
           <Button onClick={openCreateModal} fullWidth leftSection={<IconPlus size={14} />} mt="xl">
             New Portfolio
@@ -256,6 +264,7 @@ function App() {
           {activeView === 'wbs' && <WbsListView planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} isReadOnly={isReadOnly} />}
           {activeView === 'allocations' && <AllocationGrid planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} isReadOnly={isReadOnly} />}
           {activeView === 'execution' && <ExecutionView planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} isReadOnly={isReadOnly} />}
+          {activeView === 'users' && <UserManagementView />}
         </AppShell.Main>
       </AppShell>
     </>

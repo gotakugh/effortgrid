@@ -46,7 +46,7 @@ pub async fn init_db(app_handle: &AppHandle) -> DbResult<SqlitePool> {
         .await?;
 
     if user_count == 0 {
-        sqlx::query("INSERT INTO users (id, name, role) VALUES (1, 'Default User', 'Developer')")
+        sqlx::query("INSERT INTO users (id, name, role, email) VALUES (1, 'Default User', 'Developer', 'default@example.com')")
             .execute(&pool)
             .await?;
     }
@@ -126,6 +126,7 @@ pub struct User {
     pub id: i64,
     pub name: String,
     pub role: String,
+    pub email: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow, Clone, Deserialize)]
@@ -155,6 +156,7 @@ pub struct PvAllocation {
 #[serde(rename_all = "camelCase")]
 pub struct DailyAllocationBulkItem {
     pub wbs_element_id: i64,
+    pub user_id: Option<i64>,
     pub date: NaiveDate,
     pub planned_value: Option<f64>,
 }
@@ -163,6 +165,7 @@ pub struct DailyAllocationBulkItem {
 #[serde(rename_all = "camelCase")]
 pub struct ActualCostBulkItem {
     pub wbs_element_id: i64,
+    pub user_id: i64,
     pub work_date: NaiveDate,
     pub actual_cost: Option<f64>,
 }
@@ -341,20 +344,31 @@ pub async fn upsert_daily_allocation(
     pool: &SqlitePool,
     plan_version_id: i64,
     wbs_element_id: i64,
+    user_id: Option<i64>,
     date: NaiveDate,
     planned_value: Option<f64>,
 ) -> DbResult<()> {
     let mut tx = pool.begin().await?;
 
     // Find existing allocation for this specific day
-    let existing_id: Option<i64> = sqlx::query_scalar(
-        "SELECT id FROM pv_allocations WHERE plan_version_id = ? AND wbs_element_id = ? AND start_date = ?",
-    )
-    .bind(plan_version_id)
-    .bind(wbs_element_id)
-    .bind(date)
-    .fetch_optional(&mut *tx)
-    .await?;
+    let existing_id: Option<i64> = if let Some(uid) = user_id {
+        sqlx::query_scalar(
+            "SELECT id FROM pv_allocations WHERE plan_version_id = ? AND wbs_element_id = ? AND user_id = ? AND start_date = ?",
+        )
+        .bind(plan_version_id)
+        .bind(wbs_element_id)
+        .bind(uid)
+        .bind(date)
+        .fetch_optional(&mut *tx).await?
+    } else {
+        sqlx::query_scalar(
+            "SELECT id FROM pv_allocations WHERE plan_version_id = ? AND wbs_element_id = ? AND user_id IS NULL AND start_date = ?",
+        )
+        .bind(plan_version_id)
+        .bind(wbs_element_id)
+        .bind(date)
+        .fetch_optional(&mut *tx).await?
+    };
 
     let pv_to_use = planned_value.filter(|&pv| pv > 0.0);
 
@@ -369,10 +383,11 @@ pub async fn upsert_daily_allocation(
         }
         (Some(pv), None) => {
             sqlx::query(
-                "INSERT INTO pv_allocations (plan_version_id, wbs_element_id, start_date, end_date, planned_value) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO pv_allocations (plan_version_id, wbs_element_id, user_id, start_date, end_date, planned_value) VALUES (?, ?, ?, ?, ?, ?)",
             )
             .bind(plan_version_id)
             .bind(wbs_element_id)
+            .bind(user_id)
             .bind(date)
             .bind(date)
             .bind(pv)
@@ -402,14 +417,24 @@ pub async fn upsert_daily_allocations_bulk(
     let mut tx = pool.begin().await?;
 
     for alloc in allocations {
-        let existing_id: Option<i64> = sqlx::query_scalar(
-            "SELECT id FROM pv_allocations WHERE plan_version_id = ? AND wbs_element_id = ? AND start_date = ?",
-        )
-        .bind(plan_version_id)
-        .bind(alloc.wbs_element_id)
-        .bind(alloc.date)
-        .fetch_optional(&mut *tx)
-        .await?;
+        let existing_id: Option<i64> = if let Some(uid) = alloc.user_id {
+            sqlx::query_scalar(
+                "SELECT id FROM pv_allocations WHERE plan_version_id = ? AND wbs_element_id = ? AND user_id = ? AND start_date = ?",
+            )
+            .bind(plan_version_id)
+            .bind(alloc.wbs_element_id)
+            .bind(uid)
+            .bind(alloc.date)
+            .fetch_optional(&mut *tx).await?
+        } else {
+            sqlx::query_scalar(
+                "SELECT id FROM pv_allocations WHERE plan_version_id = ? AND wbs_element_id = ? AND user_id IS NULL AND start_date = ?",
+            )
+            .bind(plan_version_id)
+            .bind(alloc.wbs_element_id)
+            .bind(alloc.date)
+            .fetch_optional(&mut *tx).await?
+        };
 
         let pv_to_use = alloc.planned_value.filter(|&pv| pv > 0.0);
 
@@ -423,10 +448,11 @@ pub async fn upsert_daily_allocations_bulk(
             }
             (Some(pv), None) => {
                 sqlx::query(
-                    "INSERT INTO pv_allocations (plan_version_id, wbs_element_id, start_date, end_date, planned_value) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO pv_allocations (plan_version_id, wbs_element_id, user_id, start_date, end_date, planned_value) VALUES (?, ?, ?, ?, ?, ?)",
                 )
                 .bind(plan_version_id)
                 .bind(alloc.wbs_element_id)
+                .bind(alloc.user_id)
                 .bind(alloc.date)
                 .bind(alloc.date)
                 .bind(pv)
@@ -640,9 +666,10 @@ pub async fn upsert_actual_cost(
     let mut tx = pool.begin().await?;
 
     let existing_id: Option<i64> = sqlx::query_scalar(
-        "SELECT id FROM actual_costs WHERE wbs_element_id = ? AND work_date = ?",
+        "SELECT id FROM actual_costs WHERE wbs_element_id = ? AND user_id = ? AND work_date = ?",
     )
     .bind(wbs_element_id)
+    .bind(user_id)
     .bind(work_date)
     .fetch_optional(&mut *tx)
     .await?;
@@ -683,16 +710,16 @@ pub async fn upsert_actual_cost(
 
 pub async fn upsert_actual_costs_bulk(
     pool: &SqlitePool,
-    user_id: i64,
     costs: &[ActualCostBulkItem],
 ) -> DbResult<()> {
     let mut tx = pool.begin().await?;
 
     for cost in costs {
         let existing_id: Option<i64> = sqlx::query_scalar(
-            "SELECT id FROM actual_costs WHERE wbs_element_id = ? AND work_date = ?",
+            "SELECT id FROM actual_costs WHERE wbs_element_id = ? AND user_id = ? AND work_date = ?",
         )
         .bind(cost.wbs_element_id)
+        .bind(cost.user_id)
         .bind(cost.work_date)
         .fetch_optional(&mut *tx)
         .await?;
@@ -712,7 +739,7 @@ pub async fn upsert_actual_costs_bulk(
                     "INSERT INTO actual_costs (wbs_element_id, user_id, work_date, actual_cost) VALUES (?, ?, ?, ?)",
                 )
                 .bind(cost.wbs_element_id)
-                .bind(user_id)
+                .bind(cost.user_id)
                 .bind(cost.work_date)
                 .bind(ac)
                 .execute(&mut *tx)
@@ -862,4 +889,62 @@ pub async fn get_progress_updates_for_element(
     .fetch_all(pool)
     .await?;
     Ok(records)
+}
+
+// ----- User Management -----
+
+pub async fn add_user(
+    pool: &SqlitePool,
+    name: &str,
+    role: &str,
+    email: Option<&str>,
+) -> DbResult<User> {
+    let id = sqlx::query("INSERT INTO users (name, role, email) VALUES (?, ?, ?)")
+        .bind(name)
+        .bind(role)
+        .bind(email)
+        .execute(pool)
+        .await?
+        .last_insert_rowid();
+
+    let new_user = sqlx::query_as("SELECT * FROM users WHERE id = ?")
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+
+    Ok(new_user)
+}
+
+pub async fn update_user(
+    pool: &SqlitePool,
+    id: i64,
+    name: &str,
+    role: &str,
+    email: Option<&str>,
+) -> DbResult<User> {
+    sqlx::query("UPDATE users SET name = ?, role = ?, email = ? WHERE id = ?")
+        .bind(name)
+        .bind(role)
+        .bind(email)
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+    let updated_user = sqlx::query_as("SELECT * FROM users WHERE id = ?")
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+
+    Ok(updated_user)
+}
+
+pub async fn delete_user(pool: &SqlitePool, id: i64) -> DbResult<u64> {
+    // Note: This is a hard delete. If there are foreign key constraints,
+    // this will fail if the user is referenced in other tables.
+    let rows_affected = sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?
+        .rows_affected();
+    Ok(rows_affected)
 }
