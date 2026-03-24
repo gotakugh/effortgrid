@@ -23,13 +23,13 @@ import { AllocationGrid } from './features/allocations/AllocationGrid';
 import { ExecutionView } from './features/execution/ExecutionView';
 import { DashboardView } from './features/dashboard/DashboardView';
 
-const createProjectSchema = z.object({
+const createProjectSchema: z.ZodType<{ name: string }> = z.object({
   name: z.string().min(1, { message: 'Project name is required' }),
-}) satisfies z.ZodType<{ name: string }>;
+});
 
-const createBaselineSchema = z.object({
+const createBaselineSchema: z.ZodType<{ name: string }> = z.object({
   name: z.string().min(1, { message: 'Baseline name is required' }),
-}) satisfies z.ZodType<{ name: string }>;
+});
 
 function App() {
   const [activeView, setActiveView] = useState('dashboard');

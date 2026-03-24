@@ -32,10 +32,10 @@ interface WbsListViewProps {
   isReadOnly: boolean;
 }
 
-const addElementSchema = z.object({
+const addElementSchema: z.ZodType<{ title: string; elementType: WbsElementType }> = z.object({
   title: z.string().min(1, { message: 'Title is required' }),
   elementType: z.enum(['Project', 'WorkPackage', 'Activity']),
-}) satisfies z.ZodType<{ title: string; elementType: WbsElementType }>;
+});
 
 // WBSの各行をレンダリングする再帰コンポーネント
 function WbsElementRow({
