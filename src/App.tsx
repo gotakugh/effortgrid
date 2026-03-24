@@ -25,11 +25,11 @@ import { DashboardView } from './features/dashboard/DashboardView';
 
 const createProjectSchema = z.object({
   name: z.string().min(1, { message: 'Project name is required' }),
-});
+}) satisfies z.ZodType<{ name: string }>;
 
 const createBaselineSchema = z.object({
   name: z.string().min(1, { message: 'Baseline name is required' }),
-});
+}) satisfies z.ZodType<{ name: string }>;
 
 function App() {
   const [activeView, setActiveView] = useState('dashboard');

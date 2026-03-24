@@ -297,7 +297,7 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
             <ActionIcon onClick={() => changeMonth(-1)} variant="default" aria-label="Previous month"><IconChevronLeft size={16} /></ActionIcon>
             <MonthPickerInput
                 value={currentMonth}
-                onChange={(date) => date && setCurrentMonth(date)}
+                onChange={(date) => date && setCurrentMonth(new Date(date))}
                 placeholder="Pick month"
                 style={{width: 150}}
             />

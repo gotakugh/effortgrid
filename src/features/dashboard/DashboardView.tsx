@@ -16,8 +16,8 @@ import { WbsElementDetail, WidgetConfig } from '../../types';
 import { DashboardWidget } from './DashboardWidget';
 
 const DEFAULT_WIDGETS: Omit<WidgetConfig, 'id'>[] = [
-    { title: 'Overall S-Curve', chartType: 'SCurve', granularity: 'monthly', targetWbsId: null },
-    { title: 'Overall Forecast', chartType: 'EvEtcArea', granularity: 'monthly', targetWbsId: null },
+    { title: 'Overall S-Curve', chartType: 'SCurve', granularity: 'monthly', wbsIds: [], userIds: [], milestoneIds: [], tags: [] },
+    { title: 'Overall Forecast', chartType: 'EvEtcArea', granularity: 'monthly', wbsIds: [], userIds: [], milestoneIds: [], tags: [] },
 ];
 
 interface DashboardViewProps {
@@ -59,7 +59,10 @@ export function DashboardView({ planVersionId }: DashboardViewProps) {
       title: 'New S-Curve',
       chartType: 'SCurve',
       granularity: 'monthly',
-      targetWbsId: null,
+      wbsIds: [],
+      userIds: [],
+      milestoneIds: [],
+      tags: [],
     };
     setWidgets(current => [...current, newWidget]);
   };
@@ -99,7 +102,6 @@ export function DashboardView({ planVersionId }: DashboardViewProps) {
                     planVersionId={planVersionId}
                     onUpdate={updateWidget}
                     onRemove={removeWidget}
-                    filterableNodes={filterableNodes}
                 />
             ))}
         </SimpleGrid>

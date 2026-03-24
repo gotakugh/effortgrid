@@ -12,8 +12,6 @@ import {
   Badge,
   SegmentedControl,
   ActionIcon,
-  Tooltip as MantineTooltip,
-  Select,
   SimpleGrid,
   MultiSelect,
   Collapse,
@@ -32,7 +30,7 @@ import {
   Area,
 } from 'recharts';
 import { IconAlertCircle, IconTrash } from '@tabler/icons-react';
-import { EvmKpis, SCurveDataPoint, WidgetConfig, WbsElementDetail, ChartType, Granularity, User, PlanMilestone } from '../../types';
+import { EvmKpis, SCurveDataPoint, WidgetConfig, WbsElementDetail, Granularity, User, PlanMilestone } from '../../types';
 import dayjs from 'dayjs';
 import classes from './Dashboard.module.css';
 import { useDisclosure } from '@mantine/hooks';

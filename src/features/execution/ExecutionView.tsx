@@ -7,7 +7,6 @@ import {
   Stack,
   NavLink,
   Badge,
-  Group,
   ScrollArea,
   Title,
   Button,
