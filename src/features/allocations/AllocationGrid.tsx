@@ -450,10 +450,18 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
       } else if (key === 'ArrowRight' && colIndex < dateStrs.length - 1) {
         focusCell(wbsElementId, dateStrs[colIndex + 1]);
       } else if (key === 'Delete' || key === 'Backspace') {
-        handlePvChange(wbsElementId, date, null);
+        const updates: Promise<void>[] = [];
+        const cellsToUpdate = selectedCells.size > 1 ? selectedCells : new Set([`cell-pv-${wbsElementId}-${date}`]);
+        
+        cellsToUpdate.forEach(cellId => {
+            const [,,, ...dateParts] = cellId.split('-');
+            const cellWbsId = Number(cellId.split('-')[2]);
+            updates.push(handlePvChange(cellWbsId, dateParts.join('-'), null, false));
+        });
+        Promise.all(updates).then(() => fetchAllData());
       }
     },
-    [activityRowIds, dateStrs, handlePvChange]
+    [activityRowIds, dateStrs, handlePvChange, selectedCells, fetchAllData]
   );
 
   const handleCellPaste = useCallback(

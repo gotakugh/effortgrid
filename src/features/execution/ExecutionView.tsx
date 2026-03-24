@@ -131,7 +131,7 @@ const GridRow = ({ node, level, days, data, allElements, onAcChange, isReadOnly,
         })}
         <Table.Td className={classes.summary_col}><Text size="xs" c="dimmed">P: {totalPvForMonth.toFixed(1)}</Text><Text size="sm" fw={500}>A: {totalAcForMonth.toFixed(1)}</Text></Table.Td>
       </Table.Tr>
-      {node.children.map((child) => <GridRow key={child.id} node={child} level={level + 1} days={days} data={data} allElements={allElements} onAcChange={onAcChange} isReadOnly={isReadOnly} onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste} />)}
+      {node.children.map((child) => <GridRow key={child.id} node={child} level={level + 1} days={days} data={data} allElements={allElements} onAcChange={onAcChange} isReadOnly={isReadOnly} onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste} onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver} selectedCells={selectedCells} />)}
     </>
   );
 };
