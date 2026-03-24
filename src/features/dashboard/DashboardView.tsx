@@ -25,6 +25,7 @@ import {
   Brush,
   ComposedChart,
   Bar,
+  Area,
 } from 'recharts';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { EvmKpis, SCurveDataPoint } from '../../types';
@@ -137,8 +138,8 @@ export function DashboardView({ planVersionId }: DashboardViewProps) {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="cumulativeEv" stackId="a" fill="#82ca9d" name="Earned Value (EV)" />
-                <Bar dataKey="actualEtc" stackId="a" fill="#4c6a85" name="ETC (Actual)" />
+                <Area type="monotone" dataKey="cumulativeEv" stackId="a" stroke="#82ca9d" fill="#82ca9d" name="Earned Value (EV)" />
+                <Area type="monotone" dataKey="actualEtc" stackId="a" stroke="#4c6a85" fill="#4c6a85" name="ETC (Actual)" />
                 <Line type="monotone" dataKey="plannedEtc" stroke="#ff7300" strokeWidth={2} name="ETC (Planned)" dot={false}/>
                 <Brush dataKey="date" height={30} stroke="#8884d8" />
             </ComposedChart>
