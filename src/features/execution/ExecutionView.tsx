@@ -45,24 +45,48 @@ const AcInputCell = ({ wbsElementId, date, pv, initialAc, onCommit, isReadOnly, 
   };
 
   return (
-    <Box className={classes.ac_cell_wrapper}>
-      {pv && <Text size="xs" c="dimmed" ta="center">P: {pv.toFixed(1)}</Text>}
+    <Stack gap={0} justify="stretch" style={{ height: '100%', cursor: 'cell' }} onMouseDown={onMouseDown} onMouseOver={onMouseOver}>
+      <Box
+        style={{
+          flex: 1,
+          padding: '2px 4px',
+          backgroundColor: isSelected ? 'var(--mantine-color-blue-light-hover)' : 'var(--mantine-color-gray-0)',
+          borderBottom: '1px solid var(--mantine-color-gray-2)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+        }}
+      >
+        <Text size="xs" c="dimmed">
+          PV: {pv != null ? pv.toFixed(1) : '-'}
+        </Text>
+      </Box>
       <NumberInput
         id={`cell-ac-${wbsElementId}-${date}`}
         classNames={{ input: classes.ac_input }}
+        styles={{
+          wrapper: { flex: 1, display: 'flex' },
+          input: { 
+            height: '100%', 
+            flex: 1,
+            backgroundColor: isSelected ? 'var(--mantine-color-blue-light)' : 'transparent',
+            textAlign: 'right',
+            paddingRight: 'var(--mantine-spacing-xs)',
+          }
+        }}
         value={value}
         onChange={setValue}
         onBlur={handleBlur}
         onKeyDown={(e) => onKeyDown(e, wbsElementId, date)}
         onPaste={(e) => onPaste(e, wbsElementId, date)}
-        onMouseDown={onMouseDown}
-        onMouseOver={onMouseOver}
-        style={{ backgroundColor: isSelected ? 'var(--mantine-color-blue-light)' : undefined, cursor: 'cell' }}
+        // MouseDown and MouseOver are now on the wrapper Stack
+        // onMouseDown={onMouseDown}
+        // onMouseOver={onMouseOver}
         step={0.1} min={0} hideControls
         readOnly={isReadOnly}
         variant="unstyled"
       />
-    </Box>
+    </Stack>
   );
 };
 
@@ -97,18 +121,21 @@ const GridRow = ({ node, level, days, data, allElements, onAcChange, isReadOnly,
   const totalPvForMonth = useMemo(() => days.reduce((total, day) => total + getRollupValue(day.format('YYYY-MM-DD'), 'pv'), 0), [days, data, activityDescendants]);
   const totalAcForMonth = useMemo(() => days.reduce((total, day) => total + getRollupValue(day.format('YYYY-MM-DD'), 'ac'), 0), [days, data, activityDescendants]);
 
+  const isActivity = node.elementType === 'Activity';
+  const tdStyle = isActivity ? { verticalAlign: 'middle' } : {};
+
   return (
     <>
       <Table.Tr>
-        <Table.Td className={classes.sticky_col}>
+        <Table.Td className={classes.sticky_col} style={tdStyle}>
           <Group gap="xs" style={{ paddingLeft: level * 20 }}><Badge color={getBadgeColor(node.elementType)} size="sm">{node.elementType.substring(0, 1)}</Badge><Text size="sm" truncate>{node.title}</Text></Group>
         </Table.Td>
         {days.map((day) => {
           const dateStr = day.format('YYYY-MM-DD');
           const cellId = `cell-ac-${node.wbsElementId}-${dateStr}`;
           return (
-            <Table.Td key={dateStr} className={classes.data_cell}>
-              {node.elementType === 'Activity' ? (
+            <Table.Td key={dateStr} className={classes.data_cell} style={isActivity ? { padding: 0 } : {}}>
+              {isActivity ? (
                 <AcInputCell
                   wbsElementId={node.wbsElementId} date={dateStr}
                   pv={data[node.wbsElementId]?.[dateStr]?.pv}
@@ -129,7 +156,10 @@ const GridRow = ({ node, level, days, data, allElements, onAcChange, isReadOnly,
             </Table.Td>
           );
         })}
-        <Table.Td className={classes.summary_col}><Text size="xs" c="dimmed">P: {totalPvForMonth.toFixed(1)}</Text><Text size="sm" fw={500}>A: {totalAcForMonth.toFixed(1)}</Text></Table.Td>
+        <Table.Td className={classes.summary_col} style={tdStyle}>
+          <Text size="xs" c="dimmed">P: {totalPvForMonth.toFixed(1)}</Text>
+          <Text size="sm" fw={500}>A: {totalAcForMonth.toFixed(1)}</Text>
+        </Table.Td>
       </Table.Tr>
       {node.children.map((child) => <GridRow key={child.id} node={child} level={level + 1} days={days} data={data} allElements={allElements} onAcChange={onAcChange} isReadOnly={isReadOnly} onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste} onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver} selectedCells={selectedCells} />)}
     </>
