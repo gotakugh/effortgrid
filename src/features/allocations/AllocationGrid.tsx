@@ -75,8 +75,8 @@ const PvInputCell = ({
   initialValue?: number;
   onCommit: (value: number | null) => void;
   isReadOnly: boolean;
-  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
-  onPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => void;
+  onPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => void;
   onMouseDown: (e: React.MouseEvent<HTMLInputElement>) => void;
   onMouseOver: () => void;
   isSelected: boolean;
@@ -102,8 +102,8 @@ const PvInputCell = ({
       value={value}
       onChange={setValue}
       onBlur={handleBlur}
-      onKeyDown={(e) => onKeyDown(e, wbsElementId, date)}
-      onPaste={(e) => onPaste(e, wbsElementId, date)}
+      onKeyDown={(e) => onKeyDown(e, wbsElementId, userId, date)}
+      onPaste={(e) => onPaste(e, wbsElementId, userId, date)}
       onMouseDown={onMouseDown}
       onMouseOver={onMouseOver}
       style={{
@@ -124,114 +124,148 @@ const PvInputCell = ({
 };
 
 const GridRow = ({
-  node,
-  level,
-  days,
-  allocations,
-  allElements,
-  onPvChange,
-  isReadOnly,
-  onCellKeyDown,
-  onCellPaste,
-  onCellMouseDown,
-  onCellMouseOver,
-  selectedCells,
+  node, level, days, allocations, allElements, users, assignedUsers,
+  onPvChange, isReadOnly, onAddUser,
+  onCellKeyDown, onCellPaste, onCellMouseDown, onCellMouseOver, selectedCells
 }: {
-  node: TreeNode;
-  level: number;
-  days: dayjs.Dayjs[];
-  allocations: AllocationMap;
-  allElements: WbsElementDetail[];
-  onPvChange: (wbsElementId: number, date: string, value: number | null) => void;
+  node: TreeNode; level: number; days: dayjs.Dayjs[];
+  allocations: AllocationMap; allElements: WbsElementDetail[]; users: User[];
+  assignedUsers: Set<number>;
+  onPvChange: (wbsElementId: number, userId: number, date: string, value: number | null) => void;
   isReadOnly: boolean;
-  onCellKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
-  onCellPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
-  onCellMouseDown: (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, date: string) => void;
-  onCellMouseOver: (wbsElementId: number, date: string) => void;
+  onAddUser: (wbsElementId: number, userId: number) => void;
+  onCellKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => void;
+  onCellPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => void;
+  onCellMouseDown: (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => void;
+  onCellMouseOver: (wbsElementId: number, userId: number, date: string) => void;
   selectedCells: Set<string>;
 }) => {
-  // Memoize descendant IDs to avoid recalculating on every render
-  const descendantIds = useMemo(() => {
-    const getIds = (n: TreeNode): number[] => [
-      n.wbsElementId,
-      ...n.children.flatMap(getIds),
-    ];
-    return getIds(node);
-  }, [node]);
 
-  const activityDescendants = useMemo(() => {
-    return allElements.filter(el => descendantIds.includes(el.wbsElementId) && el.elementType === 'Activity');
-  }, [allElements, descendantIds]);
-
+  const isActivity = node.elementType === 'Activity';
+  const userMap = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
+  
   const getRollupValue = (date: string): number => {
+    const getIds = (n: TreeNode): number[] => [n.wbsElementId, ...n.children.flatMap(getIds)];
+    const descendantIds = getIds(node);
+    const activityDescendants = allElements.filter(el => descendantIds.includes(el.wbsElementId) && el.elementType === 'Activity');
+    
     return activityDescendants.reduce((sum, activity) => {
-      return sum + (allocations[activity.wbsElementId]?.[date]?.pv || 0);
+      const activityAllocs = allocations[activity.wbsElementId];
+      if (!activityAllocs) return sum;
+      return sum + Object.values(activityAllocs).reduce((userSum, userAllocs) => {
+        return userSum + (userAllocs[date]?.pv || 0);
+      }, 0);
     }, 0);
   };
+  
+  const totalForActivityMonth = useMemo(() => {
+    if (!isActivity) return 0;
+    const activityAllocs = allocations[node.wbsElementId];
+    if (!activityAllocs) return 0;
+    return days.reduce((total, day) => {
+      const dateStr = day.format('YYYY-MM-DD');
+      return total + Object.values(activityAllocs).reduce((dayTotal, userAllocs) => dayTotal + (userAllocs[dateStr]?.pv || 0), 0);
+    }, 0);
+  }, [days, allocations, node, isActivity]);
 
-  const totalForMonth = useMemo(() => {
-    const idsToSum = node.elementType === 'Activity' ? [node.wbsElementId] : activityDescendants.map(a => a.wbsElementId);
+  const totalForUserMonth = (userId: number) => {
+    if (!isActivity) return 0;
+    const userAllocs = allocations[node.wbsElementId]?.[userId];
+    if (!userAllocs) return 0;
     return days.reduce((total, day) => {
         const dateStr = day.format('YYYY-MM-DD');
-        return total + idsToSum.reduce((dayTotal, id) => dayTotal + (allocations[id]?.[dateStr]?.pv || 0), 0)
-    }, 0)
-  }, [days, allocations, node, activityDescendants]);
+        return total + (userAllocs[dateStr]?.pv || 0);
+    }, 0);
+  };
+  
+  const usersToRender = useMemo(() => Array.from(assignedUsers).sort((a, b) => a - b), [assignedUsers]);
+  const availableUsers = useMemo(() => users.filter(u => !assignedUsers.has(u.id)), [users, assignedUsers]);
 
   return (
     <>
+      {/* Main WBS Element Row (Project, WorkPackage, or Activity summary) */}
       <Table.Tr>
         <Table.Td className={classes.sticky_col}>
           <Group gap="xs" style={{ paddingLeft: level * 20 }}>
-            <Badge color={getBadgeColor(node.elementType)} size="sm">
-              {node.elementType.substring(0, 1)}
-            </Badge>
+            {isActivity && (
+              <Menu shadow="md" width={200}>
+                <Menu.Target>
+                  <Tooltip label="Add person">
+                    <ActionIcon variant="subtle" size="sm"><IconPlus size={14} /></ActionIcon>
+                  </Tooltip>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Label>Assign a person</Menu.Label>
+                  {availableUsers.map(user => (
+                    <Menu.Item key={user.id} leftSection={<Avatar size="sm" color="blue">{user.name.substring(0, 2)}</Avatar>} onClick={() => onAddUser(node.wbsElementId, user.id)}>
+                      {user.name}
+                    </Menu.Item>
+                  ))}
+                  {availableUsers.length === 0 && <Menu.Item disabled>No other people to assign</Menu.Item>}
+                </Menu.Dropdown>
+              </Menu>
+            )}
+            <Badge color={getBadgeColor(node.elementType)} size="sm">{node.elementType.substring(0, 1)}</Badge>
             <Text size="sm" truncate>{node.title}</Text>
           </Group>
         </Table.Td>
 
-        {days.map((day) => {
-          const dateStr = day.format('YYYY-MM-DD');
-          const cellId = `cell-pv-${node.wbsElementId}-${dateStr}`;
-          return (
-            <Table.Td key={dateStr} style={node.elementType === 'Activity' ? { padding: 0 } : {}}>
-              {node.elementType === 'Activity' ? (
-                <PvInputCell
-                  wbsElementId={node.wbsElementId}
-                  date={dateStr}
-                  initialValue={allocations[node.wbsElementId]?.[dateStr]?.pv}
-                  onCommit={(value) => onPvChange(node.wbsElementId, dateStr, value)}
-                  isReadOnly={isReadOnly}
-                  onKeyDown={onCellKeyDown}
-                  onPaste={onCellPaste}
-                  onMouseDown={(e) => onCellMouseDown(e, node.wbsElementId, dateStr)}
-                  onMouseOver={() => onCellMouseOver(node.wbsElementId, dateStr)}
-                  isSelected={selectedCells.has(cellId)}
-                />
-              ) : (
-                <div className={classes.rollup_cell}>
-                  {getRollupValue(dateStr) > 0 ? getRollupValue(dateStr).toFixed(1) : '-'}
-                </div>
-              )}
-            </Table.Td>
-          );
-        })}
+        {days.map((day) => (
+          <Table.Td key={day.format('YYYY-MM-DD')} className={isActivity ? classes.activity_rollup_cell : classes.rollup_cell}>
+            {getRollupValue(day.format('YYYY-MM-DD')) > 0 ? getRollupValue(day.format('YYYY-MM-DD')).toFixed(1) : '-'}
+          </Table.Td>
+        ))}
         <Table.Td className={classes.summary_col}>{node.estimatedPv || '-'}</Table.Td>
-        <Table.Td className={classes.summary_col}>{totalForMonth > 0 ? totalForMonth.toFixed(1) : '-'}</Table.Td>
+        <Table.Td className={classes.summary_col}>{totalForActivityMonth > 0 ? totalForActivityMonth.toFixed(1) : '-'}</Table.Td>
       </Table.Tr>
+      
+      {/* User rows for Activities */}
+      {isActivity && usersToRender.map(userId => {
+        const user = userMap.get(userId);
+        return (
+          <Table.Tr key={`${node.wbsElementId}-${userId}`}>
+            <Table.Td className={classes.sticky_col}>
+              <Group gap="xs" style={{ paddingLeft: (level * 20) + 30 }}>
+                <Avatar size="sm" color="cyan">{user?.name.substring(0,2)}</Avatar>
+                <Text size="xs">{user?.name || `User ${userId}`}</Text>
+              </Group>
+            </Table.Td>
+            {days.map((day) => {
+              const dateStr = day.format('YYYY-MM-DD');
+              const cellId = `cell-pv-${node.wbsElementId}-${userId}-${dateStr}`;
+              return (
+                <Table.Td key={dateStr} style={{ padding: 0 }}>
+                  <PvInputCell
+                    wbsElementId={node.wbsElementId}
+                    userId={userId}
+                    date={dateStr}
+                    initialValue={allocations[node.wbsElementId]?.[userId]?.[dateStr]?.pv}
+                    onCommit={(value) => onPvChange(node.wbsElementId, userId, dateStr, value)}
+                    isReadOnly={isReadOnly}
+                    onKeyDown={(e) => onCellKeyDown(e, node.wbsElementId, userId, dateStr)}
+                    onPaste={(e) => onCellPaste(e, node.wbsElementId, userId, dateStr)}
+                    onMouseDown={(e) => onCellMouseDown(e, node.wbsElementId, userId, dateStr)}
+                    onMouseOver={() => onCellMouseOver(node.wbsElementId, userId, dateStr)}
+                    isSelected={selectedCells.has(cellId)}
+                  />
+                </Table.Td>
+              );
+            })}
+            <Table.Td className={classes.summary_col}></Table.Td>
+            <Table.Td className={classes.summary_col}>{totalForUserMonth(userId) > 0 ? totalForUserMonth(userId).toFixed(1) : '-'}</Table.Td>
+          </Table.Tr>
+        )
+      })}
+      
+      {/* Child WBS Element Rows */}
       {node.children.map((child) => (
         <GridRow
-          key={child.id}
-          node={child}
-          level={level + 1}
-          days={days}
-          allocations={allocations}
-          allElements={allElements}
-          onPvChange={onPvChange}
-          isReadOnly={isReadOnly}
-          onCellKeyDown={onCellKeyDown}
-          onCellPaste={onCellPaste}
-          onCellMouseDown={onCellMouseDown}
-          onCellMouseOver={onCellMouseOver}
+          key={child.id} node={child} level={level + 1} days={days}
+          allocations={allocations} allElements={allElements} users={users}
+          assignedUsers={assignedUsers[child.wbsElementId] || new Set()}
+          onPvChange={onPvChange} isReadOnly={isReadOnly} onAddUser={onAddUser}
+          onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste}
+          onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver}
           selectedCells={selectedCells}
         />
       ))}
@@ -380,21 +414,23 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
     cell?.focus();
   };
 
-  const handleCellMouseDown = (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, date: string) => {
+  const handleCellMouseDown = (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => {
     e.preventDefault();
     e.currentTarget.focus();
     setIsSelecting(true);
-    const cellId = `cell-pv-${wbsElementId}-${date}`;
+    const cellId = `cell-pv-${wbsElementId}-${userId}-${date}`;
     
+    const findRowIndex = (wbsId: number, uId: number) => activityRowIds.findIndex(r => r.wbsId === wbsId && r.userId === uId);
+
     if (e.shiftKey && selectionAnchor) {
-        // Range selection
         const startIdParts = selectionAnchor.split('-');
         const startWbsId = Number(startIdParts[2]);
-        const startDate = startIdParts.slice(3).join('-');
+        const startUserId = Number(startIdParts[3]);
+        const startDate = startIdParts.slice(4).join('-');
 
-        const startRow = activityRowIds.indexOf(startWbsId);
+        const startRow = findRowIndex(startWbsId, startUserId);
         const startCol = dateStrs.indexOf(startDate);
-        const endRow = activityRowIds.indexOf(wbsElementId);
+        const endRow = findRowIndex(wbsElementId, userId);
         const endCol = dateStrs.indexOf(date);
 
         if (startRow === -1 || startCol === -1 || endRow === -1 || endCol === -1) {
@@ -410,9 +446,9 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
 
         for (let r = minRow; r <= maxRow; r++) {
             for (let c = minCol; c <= maxCol; c++) {
-                const cellWbsId = activityRowIds[r];
+                const rowInfo = activityRowIds[r];
                 const cellDate = dateStrs[c];
-                newSelectedCells.add(`cell-pv-${cellWbsId}-${cellDate}`);
+                newSelectedCells.add(`cell-pv-${rowInfo.wbsId}-${rowInfo.userId}-${cellDate}`);
             }
         }
         setSelectedCells(newSelectedCells);
@@ -422,16 +458,19 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
     }
   };
 
-  const handleCellMouseOver = (wbsElementId: number, date: string) => {
+  const handleCellMouseOver = (wbsElementId: number, userId: number, date: string) => {
     if (!isSelecting || !selectionAnchor) return;
+    
+    const findRowIndex = (wbsId: number, uId: number) => activityRowIds.findIndex(r => r.wbsId === wbsId && r.userId === uId);
     
     const startIdParts = selectionAnchor.split('-');
     const startWbsId = Number(startIdParts[2]);
-    const startDate = startIdParts.slice(3).join('-');
+    const startUserId = Number(startIdParts[3]);
+    const startDate = startIdParts.slice(4).join('-');
 
-    const startRow = activityRowIds.indexOf(startWbsId);
+    const startRow = findRowIndex(startWbsId, startUserId);
     const startCol = dateStrs.indexOf(startDate);
-    const endRow = activityRowIds.indexOf(wbsElementId);
+    const endRow = findRowIndex(wbsElementId, userId);
     const endCol = dateStrs.indexOf(date);
 
     if (startRow === -1 || startCol === -1 || endRow === -1 || endCol === -1) return;
@@ -444,86 +483,89 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
 
     for (let r = minRow; r <= maxRow; r++) {
         for (let c = minCol; c <= maxCol; c++) {
-            const cellWbsId = activityRowIds[r];
+            const rowInfo = activityRowIds[r];
             const cellDate = dateStrs[c];
-            newSelectedCells.add(`cell-pv-${cellWbsId}-${cellDate}`);
+            newSelectedCells.add(`cell-pv-${rowInfo.wbsId}-${rowInfo.userId}-${cellDate}`);
         }
     }
     setSelectedCells(newSelectedCells);
   };
 
   const handlePvChange = useCallback(
-    async (wbsElementId: number, date: string, value: number | null) => {
+    async (wbsElementId: number, userId: number, date: string, value: number | null) => {
       if (!planVersionId) return;
 
       setAllocations(prev => {
-        const newAllocs = JSON.parse(JSON.stringify(prev)); // Deep copy for mutation
-        if (!newAllocs[wbsElementId]) {
-          newAllocs[wbsElementId] = {};
-        }
+        const newAllocs = JSON.parse(JSON.stringify(prev));
+        if (!newAllocs[wbsElementId]) newAllocs[wbsElementId] = {};
+        if (!newAllocs[wbsElementId][userId]) newAllocs[wbsElementId][userId] = {};
 
         if (value !== null && value > 0) {
-          newAllocs[wbsElementId][date] = { id: prev[wbsElementId]?.[date]?.id || -1, pv: value };
+          newAllocs[wbsElementId][userId][date] = { id: prev[wbsElementId]?.[userId]?.[date]?.id || -1, pv: value };
         } else {
-          delete newAllocs[wbsElementId][date];
+          delete newAllocs[wbsElementId][userId][date];
         }
         return newAllocs;
       });
 
       try {
         await invoke('upsert_daily_allocation', {
-          payload: {
-            planVersionId,
-            wbsElementId,
-            date,
-            plannedValue: value,
-          },
+          payload: { planVersionId, wbsElementId, userId, date, plannedValue: value },
         });
       } catch (error) {
         console.error('Failed to upsert allocation:', error);
-        // On error, revert by refetching all data
         fetchAllData();
       }
     },
     [planVersionId, fetchAllData]
   );
 
-  const handleCellKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, date: string) => {
-      const { key } = e;
-      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Delete', 'Backspace'].includes(key)) {
-        return;
+  const handleAddUserToActivity = (wbsElementId: number, userId: number) => {
+    setAssignedUsers(prev => {
+      const newAssigned = { ...prev };
+      if (!newAssigned[wbsElementId]) {
+        newAssigned[wbsElementId] = new Set();
       }
+      newAssigned[wbsElementId].add(userId);
+      return newAssigned;
+    });
+  };
+
+  const handleCellKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => {
+      const { key } = e;
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Delete', 'Backspace'].includes(key)) return;
       e.preventDefault();
 
-      const rowIndex = activityRowIds.indexOf(wbsElementId);
+      const findRowIndex = (wbsId: number, uId: number) => activityRowIds.findIndex(r => r.wbsId === wbsId && r.userId === uId);
+      const rowIndex = findRowIndex(wbsElementId, userId);
       const colIndex = dateStrs.indexOf(date);
 
       if (key === 'ArrowUp' && rowIndex > 0) {
-        focusCell(activityRowIds[rowIndex - 1], date);
+        const { wbsId, userId } = activityRowIds[rowIndex - 1];
+        focusCell(wbsId, userId, date);
       } else if (key === 'ArrowDown' && rowIndex < activityRowIds.length - 1) {
-        focusCell(activityRowIds[rowIndex + 1], date);
+        const { wbsId, userId } = activityRowIds[rowIndex + 1];
+        focusCell(wbsId, userId, date);
       } else if (key === 'ArrowLeft' && colIndex > 0) {
-        focusCell(wbsElementId, dateStrs[colIndex - 1]);
+        focusCell(wbsElementId, userId, dateStrs[colIndex - 1]);
       } else if (key === 'ArrowRight' && colIndex < dateStrs.length - 1) {
-        focusCell(wbsElementId, dateStrs[colIndex + 1]);
+        focusCell(wbsElementId, userId, dateStrs[colIndex + 1]);
       } else if (key === 'Delete' || key === 'Backspace') {
-        const cellsToUpdate = selectedCells.size > 1 ? selectedCells : new Set([`cell-pv-${wbsElementId}-${date}`]);
+        const cellsToUpdate = selectedCells.size > 1 ? selectedCells : new Set([`cell-pv-${wbsElementId}-${userId}-${date}`]);
         const payload = Array.from(cellsToUpdate).map(cellId => {
-            const [,,, ...dateParts] = cellId.split('-');
-            const cellWbsId = Number(cellId.split('-')[2]);
-            return {
-                wbsElementId: cellWbsId,
-                date: dateParts.join('-'),
-                plannedValue: null,
-            };
+            const parts = cellId.split('-');
+            const wbsId = Number(parts[2]);
+            const uId = Number(parts[3]);
+            const d = parts.slice(4).join('-');
+            return { wbsElementId: wbsId, userId: uId, date: d, plannedValue: null };
         });
 
         setAllocations(prev => {
             const newAllocs = JSON.parse(JSON.stringify(prev));
             payload.forEach(item => {
-                if (newAllocs[item.wbsElementId]) {
-                    delete newAllocs[item.wbsElementId][item.date];
+                if (newAllocs[item.wbsElementId]?.[item.userId]) {
+                    delete newAllocs[item.wbsElementId][item.userId][item.date];
                 }
             });
             return newAllocs;
@@ -531,10 +573,7 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
 
         if (planVersionId) {
             invoke('upsert_daily_allocations_bulk', { payload: { planVersionId, allocations: payload } })
-                .catch(err => {
-                    console.error("Bulk delete failed:", err);
-                    fetchAllData();
-                });
+                .catch(err => { console.error("Bulk delete failed:", err); fetchAllData(); });
         }
       }
     },
@@ -542,24 +581,24 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
   );
 
   const handleCellPaste = useCallback(
-    async (e: React.ClipboardEvent<HTMLInputElement>, startWbsId: number, startDate: string) => {
+    async (e: React.ClipboardEvent<HTMLInputElement>, startWbsId: number, startUserId: number, startDate: string) => {
         e.preventDefault();
         if (isReadOnly || !planVersionId) return;
 
         const pasteData = e.clipboardData.getData('text');
-        let payload: { wbsElementId: number, date: string, plannedValue: number | null }[] = [];
-        
+        let payload: { wbsElementId: number, userId: number, date: string, plannedValue: number | null }[] = [];
+        const findRowIndex = (wbsId: number, uId: number) => activityRowIds.findIndex(r => r.wbsId === wbsId && r.userId === uId);
+
         if (selectedCells.size > 1 && !pasteData.includes('\t') && !pasteData.includes('\n') && !pasteData.includes('\r')) {
             const valueStr = pasteData.trim();
             const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
             payload = Array.from(selectedCells).map(cellId => {
-                const [,,, ...dateParts] = cellId.split('-');
-                const cellWbsId = Number(cellId.split('-')[2]);
-                return { wbsElementId: cellWbsId, date: dateParts.join('-'), plannedValue: value };
+                const parts = cellId.split('-');
+                return { wbsElementId: Number(parts[2]), userId: Number(parts[3]), date: parts.slice(4).join('-'), plannedValue: value };
             });
         } else {
             const rows = pasteData.split(/\r\n|\n|\r/);
-            const startRowIndex = activityRowIds.indexOf(startWbsId);
+            const startRowIndex = findRowIndex(startWbsId, startUserId);
             const startColIndex = dateStrs.indexOf(startDate);
             if (startRowIndex === -1 || startColIndex === -1) return;
 
@@ -567,15 +606,14 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
                 const rowData = rows[i].split('\t');
                 const currentRowIndex = startRowIndex + i;
                 if (currentRowIndex >= activityRowIds.length) break;
-                const currentWbsId = activityRowIds[currentRowIndex];
+                const { wbsId, userId } = activityRowIds[currentRowIndex];
 
                 for (let j = 0; j < rowData.length; j++) {
                     const currentColIndex = startColIndex + j;
                     if (currentColIndex >= dateStrs.length) break;
-                    const currentDate = dateStrs[currentColIndex];
                     const valueStr = rowData[j].trim();
                     const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
-                    payload.push({ wbsElementId: currentWbsId, date: currentDate, plannedValue: value });
+                    payload.push({ wbsElementId: wbsId, userId, date: dateStrs[currentColIndex], plannedValue: value });
                 }
             }
         }
@@ -585,13 +623,12 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
         setAllocations(prev => {
             const newAllocs = JSON.parse(JSON.stringify(prev));
             payload.forEach(item => {
-                if (!newAllocs[item.wbsElementId]) {
-                    newAllocs[item.wbsElementId] = {};
-                }
+                if (!newAllocs[item.wbsElementId]) newAllocs[item.wbsElementId] = {};
+                if (!newAllocs[item.wbsElementId][item.userId]) newAllocs[item.wbsElementId][item.userId] = {};
                 if (item.plannedValue !== null && item.plannedValue > 0) {
-                    newAllocs[item.wbsElementId][item.date] = { id: prev[item.wbsElementId]?.[item.date]?.id || -1, pv: item.plannedValue };
+                    newAllocs[item.wbsElementId][item.userId][item.date] = { id: -1, pv: item.plannedValue };
                 } else {
-                    delete newAllocs[item.wbsElementId][item.date];
+                    delete newAllocs[item.wbsElementId][item.userId][item.date];
                 }
             });
             return newAllocs;
@@ -610,38 +647,38 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
   useEffect(() => {
     const handleCopy = (e: ClipboardEvent) => {
       if (selectedCells.size === 0 || !e.clipboardData) return;
-      
       const activeEl = document.activeElement;
       if (!activeEl || !activeEl.id.startsWith('cell-pv-')) return;
-
       e.preventDefault();
 
+      const findRowIndex = (wbsId: number, uId: number) => activityRowIds.findIndex(r => r.wbsId === wbsId && r.userId === uId);
       let minRow = Infinity, maxRow = -1, minCol = Infinity, maxCol = -1;
       
       const cellCoords = Array.from(selectedCells).map(cellId => {
-        const [,,, ...dateParts] = cellId.split('-');
-        const date = dateParts.join('-');
-        const wbsId = Number(cellId.split('-')[2]);
-        const r = activityRowIds.indexOf(wbsId);
+        const parts = cellId.split('-');
+        const wbsId = Number(parts[2]);
+        const userId = Number(parts[3]);
+        const date = parts.slice(4).join('-');
+        const r = findRowIndex(wbsId, userId);
         const c = dateStrs.indexOf(date);
         if (r > -1 && c > -1) {
             minRow = Math.min(minRow, r); maxRow = Math.max(maxRow, r);
             minCol = Math.min(minCol, c); maxCol = Math.max(maxCol, c);
         }
-        return { r, c, wbsId, date };
+        return { r, c, wbsId, userId, date };
       }).filter(item => item.r > -1 && item.c > -1);
 
       if (minRow === Infinity) return;
 
       const grid: (number | string)[][] = Array(maxRow - minRow + 1).fill(0).map(() => Array(maxCol - minCol + 1).fill(''));
       
-      for (const { r, c, wbsId, date } of cellCoords) {
-        const cellId = `cell-pv-${wbsId}-${date}`;
+      cellCoords.forEach(({ r, c, wbsId, userId, date }) => {
+        const cellId = `cell-pv-${wbsId}-${userId}-${date}`;
         if (selectedCells.has(cellId)) {
-            const value = allocations[wbsId]?.[date]?.pv;
+            const value = allocations[wbsId]?.[userId]?.[date]?.pv;
             grid[r - minRow][c - minCol] = value ?? '';
         }
-      }
+      });
       
       const tsv = grid.map(row => row.join('\t')).join('\n');
       e.clipboardData.setData('text/plain', tsv);
@@ -701,21 +738,18 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
             </Table.Thead>
             <Table.Tbody>
               {tree.map(node => (
-                  <GridRow
-                      key={node.id}
-                      node={node}
-                      level={0}
-                      days={daysInMonth}
-                      allocations={allocations}
-                      allElements={elements}
-                      onPvChange={handlePvChange}
-                      isReadOnly={isReadOnly}
-                      onCellKeyDown={handleCellKeyDown}
-                      onCellPaste={handleCellPaste}
-                      onCellMouseDown={handleCellMouseDown}
-                      onCellMouseOver={handleCellMouseOver}
-                      selectedCells={selectedCells}
-                  />
+                <GridRow
+                    key={node.id} node={node} level={0} days={daysInMonth}
+                    allocations={allocations} allElements={elements} users={users}
+                    assignedUsers={assignedUsers[node.wbsElementId] || new Set()}
+                    onPvChange={handlePvChange} isReadOnly={isReadOnly}
+                    onAddUser={handleAddUserToActivity}
+                    onCellKeyDown={handleCellKeyDown}
+                    onCellPaste={handleCellPaste}
+                    onCellMouseDown={handleCellMouseDown}
+                    onCellMouseOver={handleCellMouseOver}
+                    selectedCells={selectedCells}
+                />
               ))}
             </Table.Tbody>
           </Table>
