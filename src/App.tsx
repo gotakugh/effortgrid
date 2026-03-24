@@ -20,6 +20,7 @@ import { IconPlus, IconTree, IconLayoutDashboard, IconCalendarStats, IconDeviceF
 import { Project, PlanVersion } from './types';
 import { WbsListView } from './features/wbs/WbsListView';
 import { AllocationGrid } from './features/allocations/AllocationGrid';
+import { ExecutionView } from './features/execution/ExecutionView';
 
 const createProjectSchema = z.object({
   name: z.string().min(1, { message: 'Project name is required' }),
