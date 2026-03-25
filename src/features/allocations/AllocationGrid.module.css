@@ -11,53 +11,6 @@
     table-layout: fixed;
 }
 
-/* ヘッダーの固定 (上) */
-.stickyHeader {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background-color: #1a1b1e; /* Mantineダークテーマの背景色などに合わせる */
-}
-
-/* 左側の列の固定 (WBS Element) */
-.stickyLeftCol1 {
-  position: sticky;
-  left: 0;
-  z-index: 20;
-  background-color: #1a1b1e;
-  min-width: 200px; /* 幅を固定すると安定します */
-}
-
-/* 左側の列の固定 (Total) - WBS列の幅分だけleftをずらす */
-.stickyLeftCol2 {
-  position: sticky;
-  left: 200px; /* stickyLeftCol1の幅と一致させる */
-  z-index: 20;
-  background-color: #1a1b1e;
-  min-width: 80px;
-}
-
-.stickyLeftCol3 {
-  position: sticky;
-  left: 280px; /* 200px + 80px */
-  z-index: 20;
-  background-color: #1a1b1e;
-  min-width: 80px;
-}
-
-/* フッター集計行の固定 (下) */
-.stickyFooter {
-  position: sticky;
-  bottom: 0;
-  z-index: 20;
-  background-color: #25262b; /* 少し色を変えるとフッターっぽくなります */
-  box-shadow: 0 -2px 5px rgba(0,0,0,0.2);
-}
-
-/* 交差点 (左上、左下) は他のセルより上に表示する */
-.stickyCorner {
-  z-index: 30;
-}
 
 .day_header {
   text-align: center;

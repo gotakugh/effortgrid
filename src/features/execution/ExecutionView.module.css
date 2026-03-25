@@ -12,30 +12,6 @@
     min-width: 100%;
 }
 
-.sticky_header {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    background-color: var(--mantine-color-body);
-}
-
-.sticky_footer {
-    position: sticky;
-    bottom: 0;
-    z-index: 2;
-    background-color: var(--mantine-color-dark-8);
-    border-top: 1px solid var(--mantine-color-dark-4);
-}
-
-.sticky_col {
-    position: sticky;
-    z-index: 1;
-    background-color: var(--mantine-color-body);
-    border-right: 1px solid var(--mantine-color-gray-3);
-}
-
-.sticky_col_1 { left: 0; }
-.sticky_col_2 { left: var(--col-width-wbs); }
 
 .day_header {
   text-align: center;

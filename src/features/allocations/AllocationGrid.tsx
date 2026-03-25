@@ -249,8 +249,8 @@ const ResourceCapacityFooter = ({ users, elements, allocations, columns }: {
     return (
         <Table.Tfoot>
             <Table.Tr>
-                <Table.Th className={`${classes.stickyFooter} ${classes.stickyLeftCol1} ${classes.stickyCorner}`} colSpan={3}>Resource Capacity</Table.Th>
-                <Table.Th className={classes.stickyFooter} colSpan={columns.length}></Table.Th>
+                <Table.Th colSpan={3}>Resource Capacity</Table.Th>
+                <Table.Th colSpan={columns.length}></Table.Th>
             </Table.Tr>
             {activeUserIds.map(userId => {
                 const user = userMap.get(userId);
@@ -258,14 +258,14 @@ const ResourceCapacityFooter = ({ users, elements, allocations, columns }: {
 
                 return (
                     <Table.Tr key={userId}>
-                        <Table.Td className={`${classes.stickyLeftCol1} ${classes.stickyFooter} ${classes.stickyCorner}`}>
+                        <Table.Td>
                             <Group gap="xs">
                                 <Avatar size="sm">{user.name.substring(0, 2)}</Avatar>
                                 <Text size="xs">{user.name}</Text>
                             </Group>
                         </Table.Td>
-                        <Table.Td className={`${classes.stickyLeftCol2} ${classes.stickyFooter} ${classes.stickyCorner}`}></Table.Td>
-                        <Table.Td className={`${classes.stickyLeftCol3} ${classes.stickyFooter} ${classes.stickyCorner}`}></Table.Td>
+                        <Table.Td></Table.Td>
+                        <Table.Td></Table.Td>
 
                         {columns.map(col => {
                             const total = col.type === 'day'
@@ -278,7 +278,7 @@ const ResourceCapacityFooter = ({ users, elements, allocations, columns }: {
                                 : col.dates.some(d => (dailyTotals[userId]?.[d.format('YYYY-MM-DD')] || 0) > capacity);
                             
                             return (
-                                <Table.Td key={col.key} className={classes.stickyFooter} style={{ color: isOverloaded ? 'var(--mantine-color-red-7)' : undefined, textAlign: 'right' }}>
+                                <Table.Td key={col.key} style={{ color: isOverloaded ? 'var(--mantine-color-red-7)' : undefined, textAlign: 'right' }}>
                                     {total > 0 ? total.toFixed(1) : ''}
                                 </Table.Td>
                             );
@@ -388,7 +388,7 @@ const GridRow = ({
     <>
       {/* Main WBS Element Row (Project, WorkPackage, or Activity summary) */}
       <Table.Tr>
-        <Table.Td className={classes.stickyLeftCol1}>
+        <Table.Td>
           <Group gap="xs" style={{ paddingLeft: level * 20 }}>
             {isActivity && (
               <Menu shadow="md" width={200}>
@@ -413,9 +413,8 @@ const GridRow = ({
           </Group>
         </Table.Td>
 
-        <Table.Td className={classes.stickyLeftCol2}>{isActivity ? node.estimatedPv || '-' : (nodeTotalEstimated > 0 ? nodeTotalEstimated.toFixed(1) : '-')}</Table.Td>
+        <Table.Td>{isActivity ? node.estimatedPv || '-' : (nodeTotalEstimated > 0 ? nodeTotalEstimated.toFixed(1) : '-')}</Table.Td>
         <Table.Td 
-            className={classes.stickyLeftCol3}
             style={{ color: nodeTotalAllocated > nodeTotalEstimated ? 'var(--mantine-color-red-7)' : undefined }}
         >
             {nodeTotalAllocated > 0 ? nodeTotalAllocated.toFixed(1) : '-'}
@@ -449,14 +448,14 @@ const GridRow = ({
         
         return (
           <Table.Tr key={`${node.wbsElementId}-${userId}`}>
-            <Table.Td className={classes.stickyLeftCol1}>
+            <Table.Td>
               <Group gap="xs" style={{ paddingLeft: (level * 20) + 30 }}>
                 <Avatar size="sm" color={isUnassigned ? 'gray' : 'cyan'}>{isUnassigned ? '?' : user?.name.substring(0,2)}</Avatar>
                 <Text size="xs">{isUnassigned ? 'Unassigned' : (user?.name || `User ${userId}`)}</Text>
               </Group>
             </Table.Td>
-            <Table.Td className={classes.stickyLeftCol2}></Table.Td>
-            <Table.Td className={classes.stickyLeftCol3}>
+            <Table.Td></Table.Td>
+            <Table.Td>
                 {userTotalAllocated(userId) > 0 ? userTotalAllocated(userId).toFixed(1) : '-'}
             </Table.Td>
 
@@ -1022,14 +1021,14 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
           <Table className={classes.table} withColumnBorders>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th className={`${classes.stickyHeader} ${classes.stickyLeftCol1} ${classes.stickyCorner}`}>WBS Element</Table.Th>
-                <Table.Th className={`${classes.stickyHeader} ${classes.stickyLeftCol2} ${classes.stickyCorner}`}>Est. PV</Table.Th>
-                <Table.Th className={`${classes.stickyHeader} ${classes.stickyLeftCol3} ${classes.stickyCorner}`}>Allocated</Table.Th>
+                <Table.Th>WBS Element</Table.Th>
+                <Table.Th>Est. PV</Table.Th>
+                <Table.Th>Allocated</Table.Th>
                 {columns.map((col) => {
                   if (col.type === 'day') {
                     const isWeekend = col.date.day() === 0 || col.date.day() === 6;
                     return (
-                      <Table.Th key={col.key} className={`${classes.stickyHeader} ${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}
+                      <Table.Th key={col.key} className={`${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}
                         style={{width: '2.8rem', minWidth: '2.8rem', paddingLeft: 0, paddingRight: 0, textAlign: 'center'}}
                       >
                         <div>{col.date.format('ddd')}</div>
@@ -1038,7 +1037,7 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
                     );
                   }
                   return (
-                    <Table.Th key={col.key} className={`${classes.stickyHeader} ${classes.day_header}`} style={{minWidth: '7rem'}}>
+                    <Table.Th key={col.key} className={classes.day_header} style={{minWidth: '7rem'}}>
                       {col.label}
                     </Table.Th>
                   );
