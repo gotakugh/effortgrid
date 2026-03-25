@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
-  Group, Title, Text, Table, NumberInput, Badge, Box, Loader, Center, Alert, Stack, ActionIcon, Menu, Avatar, Tooltip, rem,
+  Group, Title, Text, Table, NumberInput, Badge, Box, Loader, Center, Alert, Stack, ActionIcon, Menu, Avatar, Tooltip, rem, SegmentedControl,
 } from '@mantine/core';
 import { MonthPickerInput } from '@mantine/dates';
 import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus } from '@tabler/icons-react';
@@ -9,8 +9,26 @@ import { WbsElementDetail, WbsElementType, PvAllocation, ActualCost, ExecutionDa
 import { useUsers } from '../../hooks/useUsers';
 import dayjs from 'dayjs';
 import classes from './ExecutionView.module.css';
+import weekOfYear from 'dayjs/plugin/weekOfYear';
+dayjs.extend(weekOfYear);
+
 
 // --- Types ---
+type ViewMode = 'daily' | 'weekly';
+
+interface DayColumn {
+  key: string;
+  type: 'day';
+  date: dayjs.Dayjs;
+}
+interface WeekColumn {
+  key: string;
+  type: 'week';
+  label: string;
+  dates: dayjs.Dayjs[];
+}
+type Column = DayColumn | WeekColumn;
+
 interface TreeNode extends WbsElementDetail {
   children: TreeNode[];
 }
@@ -73,11 +91,11 @@ const AcInputCell = ({ wbsElementId, userId, date, initialAc, onCommit, isReadOn
   );
 };
 
-const ResourceCapacityFooter = ({ users, elements, data, daysInMonth }: {
+const ResourceCapacityFooter = ({ users, elements, data, columns }: {
     users: User[];
     elements: WbsElementDetail[];
     data: ExecutionMap;
-    daysInMonth: dayjs.Dayjs[];
+    columns: Column[];
 }) => {
     const userMap = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
 
@@ -122,30 +140,32 @@ const ResourceCapacityFooter = ({ users, elements, data, daysInMonth }: {
                 const capacity = user?.dailyCapacity ?? 8.0; // Default capacity
                 if (!user) return null;
 
-                const totalForMonth = daysInMonth.reduce((sum, day) => {
-                    return sum + (dailyTotals[userId]?.[day.format('YYYY-MM-DD')] || 0);
-                }, 0);
-
                 return (
                     <Table.Tr key={userId}>
-                        <Table.Td className={classes.sticky_col}>
+                        <Table.Td className={`${classes.sticky_col} ${classes.sticky_col_1} ${classes.sticky_footer}`}>
                             <Group gap="xs">
                                 <Avatar size="sm">{user.name.substring(0, 2)}</Avatar>
                                 <Text size="xs">{user.name}</Text>
                             </Group>
                         </Table.Td>
+                        <Table.Td className={`${classes.sticky_col} ${classes.sticky_col_2} ${classes.sticky_footer}`}></Table.Td>
 
-                        {daysInMonth.map(day => {
-                            const dateStr = day.format('YYYY-MM-DD');
-                            const total = dailyTotals[userId]?.[dateStr] || 0;
-                            const isOverloaded = total > capacity;
+                        {columns.map(col => {
+                            const total = col.type === 'day'
+                                ? dailyTotals[userId]?.[col.date.format('YYYY-MM-DD')] || 0
+                                : col.dates.reduce((sum, day) => sum + (dailyTotals[userId]?.[day.format('YYYY-MM-DD')] || 0), 0);
+                            
+                            const capacity = user.dailyCapacity ?? 8.0;
+                            const isOverloaded = col.type === 'day' 
+                                ? total > capacity
+                                : col.dates.some(d => (dailyTotals[userId]?.[d.format('YYYY-MM-DD')] || 0) > capacity);
+
                             return (
-                                <Table.Td key={dateStr} style={{textAlign: 'right', color: isOverloaded ? 'var(--mantine-color-red-7)' : undefined }}>
+                                <Table.Td key={col.key} className={classes.sticky_footer} style={{textAlign: 'right', color: isOverloaded ? 'var(--mantine-color-red-7)' : undefined }}>
                                     {total > 0 ? total.toFixed(1) : ''}
                                 </Table.Td>
                             );
                         })}
-                        <Table.Td style={{textAlign: 'right'}}>{totalForMonth > 0 ? totalForMonth.toFixed(1) : ''}</Table.Td>
                     </Table.Tr>
                 );
             })}
@@ -154,11 +174,11 @@ const ResourceCapacityFooter = ({ users, elements, data, daysInMonth }: {
 };
 
 const GridRow = ({ 
-    node, level, days, data, allElements, allPlanAllocations, allPlanActuals, users, assignedUsersMap,
+    node, level, columns, data, allElements, allPlanAllocations, allPlanActuals, users, assignedUsersMap,
     onAcChange, isReadOnly, onAddUser,
     onCellKeyDown, onCellPaste, onCellMouseDown, onCellMouseOver, selectedCells 
 }: {
-  node: TreeNode; level: number; days: dayjs.Dayjs[]; data: ExecutionMap; allElements: WbsElementDetail[]; allPlanAllocations: PvAllocation[]; allPlanActuals: ActualCost[]; users: User[];
+  node: TreeNode; level: number; columns: Column[]; data: ExecutionMap; allElements: WbsElementDetail[]; allPlanAllocations: PvAllocation[]; allPlanActuals: ActualCost[]; users: User[];
   assignedUsersMap: { [wbsId: number]: Set<number> };
   onAcChange: (wbsElementId: number, userId: number, date: string, value: number | null) => void;
   isReadOnly: boolean;
@@ -179,7 +199,7 @@ const GridRow = ({
     return Object.values(unassignedData).some(d => d.pv && d.pv > 0);
   }, [data, node.wbsElementId]);
 
-  const getRollupValue = (date: string, type: 'pv' | 'ac'): number => {
+  const getRollupValue = (column: Column, type: 'pv' | 'ac'): number => {
     const getIds = (n: TreeNode): number[] => [n.wbsElementId, ...n.children.flatMap(getIds)];
     const descendantIds = getIds(node);
     const activityDescendants = allElements.filter(el => descendantIds.includes(el.wbsElementId) && el.elementType === 'Activity');
@@ -188,11 +208,14 @@ const GridRow = ({
       const activityData = data[activity.wbsElementId];
       if (!activityData) return sum;
       return sum + Object.values(activityData).reduce((userSum, userEntries) => {
-        const cellData = userEntries[date];
-        if (!cellData) return userSum;
-        if (type === 'pv') return userSum + (cellData.pv || 0);
-        if (type === 'ac') return userSum + (cellData.ac?.value || 0);
-        return userSum;
+        const dates = column.type === 'day' ? [column.date] : column.dates;
+        return userSum + dates.reduce((dateSum, date) => {
+            const cellData = userEntries[date.format('YYYY-MM-DD')];
+            if (!cellData) return dateSum;
+            if (type === 'pv') return dateSum + (cellData.pv || 0);
+            if (type === 'ac') return dateSum + (cellData.ac?.value || 0);
+            return dateSum;
+        }, 0);
       }, 0);
     }, 0);
   };
@@ -270,14 +293,13 @@ const GridRow = ({
             <Text size="sm" truncate>{node.title}</Text>
           </Group>
         </Table.Td>
-        <Table.Td style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
+        <Table.Td className={`${classes.sticky_col} ${classes.sticky_col_2}`} style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
           <Text size="sm" c="dimmed">{nodeTotalAllocated > 0 ? nodeTotalAllocated.toFixed(1) : ''}</Text>
         </Table.Td>
-        {days.map((day) => {
-          const dateStr = day.format('YYYY-MM-DD');
+        {columns.map((col) => {
           return (
-            <Table.Td key={`${dateStr}-pv`} className={classes.data_cell} style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
-              <Text size="sm" c="dimmed">{getRollupValue(dateStr, 'pv') > 0 ? getRollupValue(dateStr, 'pv').toFixed(1) : ''}</Text>
+            <Table.Td key={`${col.key}-pv`} className={classes.data_cell} style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
+              <Text size="sm" c="dimmed">{getRollupValue(col, 'pv') > 0 ? getRollupValue(col, 'pv').toFixed(1) : ''}</Text>
             </Table.Td>
           );
         })}
@@ -309,14 +331,16 @@ const GridRow = ({
         let pvStartIndex = -1, pvEndIndex = -1;
         let acStartIndex = -1, acEndIndex = -1;
         if (userEntries) {
-          days.forEach((day, dayIndex) => {
-            const dateStr = day.format('YYYY-MM-DD');
-            const entry = userEntries[dateStr];
-            if (entry?.pv && entry.pv > 0) {
+          columns.forEach((col, dayIndex) => {
+            const dates = col.type === 'day' ? [col.date] : col.dates;
+            const pvHasValue = dates.some(d => (userEntries[d.format('YYYY-MM-DD')]?.pv || 0) > 0);
+            const acHasValue = dates.some(d => (userEntries[d.format('YYYY-MM-DD')]?.ac?.value || 0) > 0);
+            
+            if (pvHasValue) {
               if (pvStartIndex === -1) pvStartIndex = dayIndex;
               pvEndIndex = dayIndex;
             }
-            if (entry?.ac?.value && entry.ac.value > 0) {
+            if (acHasValue) {
               if (acStartIndex === -1) acStartIndex = dayIndex;
               acEndIndex = dayIndex;
             }
@@ -333,26 +357,29 @@ const GridRow = ({
                   <Text size="xs">{isUnassigned ? 'Unassigned' : user?.name}</Text>
                 </Group>
               </Table.Td>
-              <Table.Td style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
+              <Table.Td className={`${classes.sticky_col} ${classes.sticky_col_2}`} style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
                 <Text size="sm" c="dimmed">{totalAllocatedForUser > 0 ? totalAllocatedForUser.toFixed(1) : ''}</Text>
               </Table.Td>
-              {days.map((day, dayIndex) => {
+              {columns.map((col, dayIndex) => {
                 const ganttClassesPv = [];
                 if (dayIndex >= pvStartIndex && dayIndex <= pvEndIndex && pvStartIndex !== -1) {
                     ganttClassesPv.push(classes.ganttBarPv);
                     if (dayIndex === pvStartIndex) ganttClassesPv.push(classes.ganttEdgeStartPv);
                     if (dayIndex === pvEndIndex) ganttClassesPv.push(classes.ganttEdgeEndPv);
                 }
+                const value = col.type === 'day'
+                    ? data[node.wbsElementId]?.[userId]?.[col.date.format('YYYY-MM-DD')]?.pv || 0
+                    : col.dates.reduce((sum, d) => sum + (data[node.wbsElementId]?.[userId]?.[d.format('YYYY-MM-DD')]?.pv || 0), 0);
                 return (
-                  <Table.Td key={`${day.format()}-pv`} className={`${classes.data_cell} ${ganttClassesPv.join(' ')}`} style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
-                    <Text size="sm" c="dimmed">{data[node.wbsElementId]?.[userId]?.[day.format('YYYY-MM-DD')]?.pv?.toFixed(1) || ''}</Text>
+                  <Table.Td key={`${col.key}-pv`} className={`${classes.data_cell} ${ganttClassesPv.join(' ')}`} style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
+                    <Text size="sm" c="dimmed">{value > 0 ? value.toFixed(1) : ''}</Text>
                   </Table.Td>
                 )
               })}
             </Table.Tr>
             {/* User AC Row */}
             <Table.Tr>
-              <Table.Td style={{ textAlign: 'right', verticalAlign: 'middle', borderTop: 'none', borderBottom: isLastUser ? '1px solid var(--mantine-color-gray-3)' : 'none' }}>
+              <Table.Td className={`${classes.sticky_col} ${classes.sticky_col_2}`} style={{ textAlign: 'right', verticalAlign: 'middle', borderTop: 'none', borderBottom: isLastUser ? '1px solid var(--mantine-color-gray-3)' : 'none' }}>
                 <Text
                   size="sm"
                   fw={500}
@@ -361,8 +388,8 @@ const GridRow = ({
                   {totalActualsForUser > 0 ? totalActualsForUser.toFixed(1) : ''}
                 </Text>
               </Table.Td>
-              {days.map((day, dayIndex) => {
-                const dateStr = day.format('YYYY-MM-DD');
+              {columns.map((col, dayIndex) => {
+                const dateStr = col.key;
                 const cellId = `cell-ac-${node.wbsElementId}-${userId}-${dateStr}`;
 
                 const ganttClassesAc = [];
@@ -372,18 +399,28 @@ const GridRow = ({
                     if (dayIndex === acEndIndex) ganttClassesAc.push(classes.ganttEdgeEndAc);
                 }
 
+                const value = col.type === 'day'
+                    ? data[node.wbsElementId]?.[userId]?.[col.date.format('YYYY-MM-DD')]?.ac?.value || 0
+                    : col.dates.reduce((sum, d) => sum + (data[node.wbsElementId]?.[userId]?.[d.format('YYYY-MM-DD')]?.ac?.value || 0), 0);
+
                 return (
                   <Table.Td key={`${dateStr}-ac`} className={`${classes.data_cell} ${ganttClassesAc.join(' ')}`} style={{ padding: 0, borderTop: 'none', textAlign: 'right', verticalAlign: 'middle', borderBottom: isLastUser ? '1px solid var(--mantine-color-gray-3)' : 'none' }}>
-                    <AcInputCell
-                      wbsElementId={node.wbsElementId} userId={userId} date={dateStr}
-                      initialAc={data[node.wbsElementId]?.[userId]?.[dateStr]?.ac?.value}
-                      onCommit={(value) => onAcChange(node.wbsElementId, userId, dateStr, value)}
-                      isReadOnly={isReadOnly || isUnassigned}
-                      onKeyDown={onCellKeyDown} onPaste={onCellPaste}
-                      onMouseDown={(e) => onCellMouseDown(e, node.wbsElementId, userId, dateStr)}
-                      onMouseOver={() => onCellMouseOver(node.wbsElementId, userId, dateStr)}
-                      isSelected={selectedCells.has(cellId)}
-                    />
+                    {col.type === 'day' ? (
+                      <AcInputCell
+                        wbsElementId={node.wbsElementId} userId={userId} date={dateStr}
+                        initialAc={value}
+                        onCommit={(value) => onAcChange(node.wbsElementId, userId, dateStr, value)}
+                        isReadOnly={isReadOnly || isUnassigned}
+                        onKeyDown={onCellKeyDown} onPaste={onCellPaste}
+                        onMouseDown={(e) => onCellMouseDown(e, node.wbsElementId, userId, dateStr)}
+                        onMouseOver={() => onCellMouseOver(node.wbsElementId, userId, dateStr)}
+                        isSelected={selectedCells.has(cellId)}
+                      />
+                    ) : (
+                      <div style={{padding: '0 var(--mantine-spacing-xs)', minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'flex-end'}}>
+                        {value > 0 ? value.toFixed(1) : ''}
+                      </div>
+                    )}
                   </Table.Td>
                 );
               })}
@@ -393,7 +430,7 @@ const GridRow = ({
       })}
 
       {/* Child WBS Element Rows */}
-      {node.children.map((child) => <GridRow key={child.id} node={child} level={level + 1} days={days} data={data} allElements={allElements} allPlanAllocations={allPlanAllocations} allPlanActuals={allPlanActuals} users={users} assignedUsersMap={assignedUsersMap} onAcChange={onAcChange} onAddUser={onAddUser} isReadOnly={isReadOnly} onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste} onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver} selectedCells={selectedCells} />)}
+      {node.children.map((child) => <GridRow key={child.id} node={child} level={level + 1} columns={columns} data={data} allElements={allElements} allPlanAllocations={allPlanAllocations} allPlanActuals={allPlanActuals} users={users} assignedUsersMap={assignedUsersMap} onAcChange={onAcChange} onAddUser={onAddUser} isReadOnly={isReadOnly} onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste} onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver} selectedCells={selectedCells} />)}
     </>
   );
 };
@@ -401,6 +438,7 @@ const GridRow = ({
 // --- Main Component ---
 export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
   const { users } = useUsers();
+  const [viewMode, setViewMode] = useState<ViewMode>('daily');
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [elements, setElements] = useState<WbsElementDetail[]>([]);
   const [executionData, setExecutionData] = useState<ExecutionMap>({});
@@ -424,6 +462,39 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     }
     return days;
   }, [currentMonth]);
+
+  const columns = useMemo((): Column[] => {
+    if (viewMode === 'daily') {
+        return daysInMonth.map(d => ({
+            key: d.format('YYYY-MM-DD'),
+            type: 'day' as const,
+            date: d,
+        }));
+    }
+    
+    // Weekly
+    const weeksMap = new Map<string, dayjs.Dayjs[]>();
+    daysInMonth.forEach(day => {
+        const weekKey = `${day.year()}-W${day.week()}`;
+        if (!weeksMap.has(weekKey)) {
+            weeksMap.set(weekKey, []);
+        }
+        weeksMap.get(weekKey)!.push(day);
+    });
+
+    const weeklyColumns: WeekColumn[] = [];
+    for (const [key, dates] of weeksMap.entries()) {
+        const firstDay = dates[0];
+        const lastDay = dates[dates.length - 1];
+        weeklyColumns.push({
+            key: key,
+            type: 'week' as const,
+            label: `W${firstDay.week()} (${firstDay.format('M/D')}-${lastDay.format('M/D')})`,
+            dates: dates,
+        });
+    }
+    return weeklyColumns;
+  }, [daysInMonth, viewMode]);
 
   const fetchAllData = useCallback(async () => {
     if (!planVersionId) {
@@ -509,7 +580,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     return roots;
   }, [elements]);
 
-  const { activityRowIds, dateStrs } = useMemo(() => {
+  const { activityRowIds, columnKeys } = useMemo(() => {
     const rowIdTuples: { wbsId: number, userId: number }[] = [];
     const activities: WbsElementDetail[] = [];
     const traverse = (nodes: TreeNode[]) => {
@@ -527,9 +598,9 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     traverse(tree);
     return {
       activityRowIds: rowIdTuples,
-      dateStrs: daysInMonth.map(d => d.format('YYYY-MM-DD'))
+      columnKeys: columns.map(c => c.key)
     };
-  }, [tree, daysInMonth, assignedUsers]);
+  }, [tree, columns, assignedUsers]);
 
   const handleAcChange = useCallback(async (wbsElementId: number, userId: number, date: string, value: number | null) => {
     if (isReadOnly) return;
@@ -649,12 +720,12 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
 
   const handleCellKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => {
     const { key } = e;
-    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Delete', 'Backspace'].includes(key)) return;
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Delete', 'Backspace'].includes(key) || viewMode === 'weekly') return;
     e.preventDefault();
 
     const findRowIndex = (wbsId: number, uId: number) => activityRowIds.findIndex(r => r.wbsId === wbsId && r.userId === uId);
     const rowIndex = findRowIndex(wbsElementId, userId);
-    const colIndex = dateStrs.indexOf(date);
+    const colIndex = columnKeys.indexOf(date);
 
     if (key === 'ArrowUp' && rowIndex > 0) {
       const { wbsId, userId } = activityRowIds[rowIndex - 1];
@@ -663,9 +734,9 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
       const { wbsId, userId } = activityRowIds[rowIndex + 1];
       focusCell(wbsId, userId, date);
     } else if (key === 'ArrowLeft' && colIndex > 0) {
-      focusCell(wbsElementId, userId, dateStrs[colIndex - 1]);
-    } else if (key === 'ArrowRight' && colIndex < dateStrs.length - 1) {
-      focusCell(wbsElementId, userId, dateStrs[colIndex + 1]);
+      focusCell(wbsElementId, userId, columnKeys[colIndex - 1]);
+    } else if (key === 'ArrowRight' && colIndex < columnKeys.length - 1) {
+      focusCell(wbsElementId, userId, columnKeys[colIndex + 1]);
     } else if (key === 'Delete' || key === 'Backspace') {
         const cellsToUpdate = selectedCells.size > 1 ? selectedCells : new Set([`cell-ac-${wbsElementId}-${userId}-${date}`]);
         const costs = Array.from(cellsToUpdate).map(cellId => {
@@ -690,11 +761,11 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
         invoke('upsert_actual_costs_bulk', { payload: { costs } })
             .catch(err => { console.error("Bulk delete failed:", err); fetchAllData(); });
     }
-  }, [activityRowIds, dateStrs, selectedCells, fetchAllData]);
+  }, [activityRowIds, columnKeys, selectedCells, fetchAllData, viewMode]);
 
   const handleCellPaste = useCallback(async (e: React.ClipboardEvent<HTMLInputElement>, startWbsId: number, startUserId: number, startDate: string) => {
     e.preventDefault();
-    if (isReadOnly) return;
+    if (isReadOnly || viewMode === 'weekly') return;
 
     const pasteData = e.clipboardData.getData('text');
     const findRowIndex = (wbsId: number, uId: number) => activityRowIds.findIndex(r => r.wbsId === wbsId && r.userId === uId);
@@ -710,7 +781,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     } else {
         const rows = pasteData.split(/\r\n|\n|\r/);
         const startRIdx = findRowIndex(startWbsId, startUserId);
-        const startCIdx = dateStrs.indexOf(startDate);
+        const startCIdx = columnKeys.indexOf(startDate);
         if (startRIdx === -1 || startCIdx === -1) return;
 
         for (let i = 0; i < rows.length; i++) {
@@ -721,9 +792,9 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
 
             for (let j = 0; j < rowData.length; j++) {
                 const cIdx = startCIdx + j;
-                if (cIdx >= dateStrs.length) break;
+                if (cIdx >= columnKeys.length) break;
                 const value = !isNaN(parseFloat(rowData[j])) ? parseFloat(rowData[j]) : null;
-                costs.push({ wbsElementId: wbsId, userId, workDate: dateStrs[cIdx], actualCost: value });
+                costs.push({ wbsElementId: wbsId, userId, workDate: columnKeys[cIdx], actualCost: value });
             }
         }
     }
@@ -758,11 +829,16 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
         console.error("Bulk paste failed:", err);
         fetchAllData(); // Revert on error
     }
-  }, [activityRowIds, dateStrs, isReadOnly, fetchAllData, selectedCells]);
+  }, [activityRowIds, columnKeys, isReadOnly, fetchAllData, selectedCells, viewMode]);
 
   useEffect(() => {
     const handleCopy = (e: ClipboardEvent) => {
       if (selectedCells.size === 0 || !e.clipboardData) return;
+      const activeEl = document.activeElement;
+      if (!activeEl || !activeEl.id.startsWith('cell-ac-')) return;
+      e.preventDefault();
+
+      if (selectedCells.size === 0 || !e.clipboardData || viewMode === 'weekly') return;
       const activeEl = document.activeElement;
       if (!activeEl || !activeEl.id.startsWith('cell-ac-')) return;
       e.preventDefault();
@@ -776,7 +852,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
         const userId = Number(parts[3]);
         const date = parts.slice(4).join('-');
         const r = findRowIndex(wbsId, userId);
-        const c = dateStrs.indexOf(date);
+        const c = columnKeys.indexOf(date);
         if (r > -1 && c > -1) {
             minRow = Math.min(minRow, r); maxRow = Math.max(maxRow, r);
             minCol = Math.min(minCol, c); maxCol = Math.max(maxCol, c);
@@ -801,7 +877,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
 
     document.addEventListener('copy', handleCopy);
     return () => document.removeEventListener('copy', handleCopy);
-  }, [selectedCells, executionData, activityRowIds, dateStrs]);
+  }, [selectedCells, executionData, activityRowIds, columnKeys, viewMode]);
 
   const changeMonth = (amount: number) => setCurrentMonth(dayjs(currentMonth).add(amount, 'month').toDate());
 
@@ -813,6 +889,14 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
       <Group justify="space-between">
         <Title order={2}>Execution Tracking (PV / AC)</Title>
         <Group>
+          <SegmentedControl
+              value={viewMode}
+              onChange={(value) => setViewMode(value as ViewMode)}
+              data={[
+                { label: 'Daily', value: 'daily' },
+                { label: 'Weekly', value: 'weekly' },
+              ]}
+            />
           <ActionIcon onClick={() => changeMonth(-1)} variant="default" aria-label="Previous month"><IconChevronLeft size={16} /></ActionIcon>
           <MonthPickerInput value={currentMonth} onChange={(date) => date && setCurrentMonth(new Date(date))} style={{ width: 150 }} />
           <ActionIcon onClick={() => changeMonth(1)} variant="default" aria-label="Next month"><IconChevronRight size={16} /></ActionIcon>
@@ -827,13 +911,23 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
           <Table className={classes.table} withColumnBorders>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th className={classes.sticky_col_header}>WBS Element</Table.Th>
-                <Table.Th style={{width: '6rem', minWidth: '6rem'}}>Total</Table.Th>
-                {daysInMonth.map((day) => {
-                  const isWeekend = day.day() === 0 || day.day() === 6;
+                <Table.Th className={`${classes.sticky_header} ${classes.sticky_col} ${classes.sticky_col_1}`} style={{zIndex: 3}}>WBS Element</Table.Th>
+                <Table.Th className={`${classes.sticky_header} ${classes.sticky_col} ${classes.sticky_col_2}`} style={{width: '6rem', minWidth: '6rem', zIndex: 3}}>Total</Table.Th>
+                {columns.map((col) => {
+                  if (col.type === 'day') {
+                    const isWeekend = col.date.day() === 0 || col.date.day() === 6;
+                    return (
+                      <Table.Th key={col.key} className={`${classes.sticky_header} ${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}
+                        style={{width: '2.8rem', minWidth: '2.8rem', paddingLeft: 0, paddingRight: 0, textAlign: 'center'}}
+                      >
+                        <div>{col.date.format('ddd')}</div>
+                        <div>{col.date.format('D')}</div>
+                      </Table.Th>
+                    );
+                  }
                   return (
-                    <Table.Th key={day.format('YYYY-MM-DD')} className={`${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}>
-                      <div>{day.format('ddd')}</div><div>{day.format('D')}</div>
+                    <Table.Th key={col.key} className={`${classes.sticky_header} ${classes.day_header}`} style={{minWidth: '7rem'}}>
+                      {col.label}
                     </Table.Th>
                   );
                 })}
@@ -842,7 +936,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
             <Table.Tbody>
               {tree.map(node => 
                 <GridRow 
-                    key={node.id} node={node} level={0} days={daysInMonth} 
+                    key={node.id} node={node} level={0} columns={columns} 
                     data={executionData} allElements={elements} allPlanAllocations={allPlanAllocations} allPlanActuals={allPlanActuals} users={users}
                     assignedUsersMap={assignedUsers}
                     onAcChange={handleAcChange} isReadOnly={isReadOnly} 
@@ -855,7 +949,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
                 />
               )}
             </Table.Tbody>
-            <ResourceCapacityFooter users={users} elements={elements} data={executionData} daysInMonth={daysInMonth} />
+            <ResourceCapacityFooter users={users} elements={elements} data={executionData} columns={columns} />
           </Table>
         </Box>
       )}
