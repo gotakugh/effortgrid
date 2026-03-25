@@ -1,11 +1,7 @@
 .table_container {
     overflow: auto;
-    /* Adjust based on header/navbar/footer height */
-    height: calc(100vh - 180px);
+    max-height: calc(100vh - 150px);
     position: relative;
-    --col-width-wbs: 22rem;
-    --col-width-pv: 6rem;
-    --col-width-alloc: 6rem;
 }
 
 .table {
@@ -15,31 +11,53 @@
     table-layout: fixed;
 }
 
-.sticky_header {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    background-color: var(--mantine-color-body);
+/* ヘッダーの固定 (上) */
+.stickyHeader {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background-color: #1a1b1e; /* Mantineダークテーマの背景色などに合わせる */
 }
 
-.sticky_col {
-    position: sticky;
-    z-index: 1;
-    background-color: var(--mantine-color-body);
-    border-right: 1px solid var(--mantine-color-dark-4);
+/* 左側の列の固定 (WBS Element) */
+.stickyLeftCol1 {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  background-color: #1a1b1e;
+  min-width: 200px; /* 幅を固定すると安定します */
 }
 
-.sticky_footer {
-    position: sticky;
-    bottom: 0;
-    z-index: 2;
-    background-color: var(--mantine-color-dark-7);
-    border-top: 1px solid var(--mantine-color-dark-4);
+/* 左側の列の固定 (Total) - WBS列の幅分だけleftをずらす */
+.stickyLeftCol2 {
+  position: sticky;
+  left: 200px; /* stickyLeftCol1の幅と一致させる */
+  z-index: 20;
+  background-color: #1a1b1e;
+  min-width: 80px;
 }
 
-.sticky_col_1 { left: 0; }
-.sticky_col_2 { left: var(--col-width-wbs); }
-.sticky_col_3 { left: calc(var(--col-width-wbs) + var(--col-width-pv)); }
+.stickyLeftCol3 {
+  position: sticky;
+  left: 280px; /* 200px + 80px */
+  z-index: 20;
+  background-color: #1a1b1e;
+  min-width: 80px;
+}
+
+/* フッター集計行の固定 (下) */
+.stickyFooter {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  background-color: #25262b; /* 少し色を変えるとフッターっぽくなります */
+  box-shadow: 0 -2px 5px rgba(0,0,0,0.2);
+}
+
+/* 交差点 (左上、左下) は他のセルより上に表示する */
+.stickyCorner {
+  z-index: 30;
+}
 
 .day_header {
   text-align: center;
