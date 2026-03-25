@@ -131,7 +131,8 @@ const ResourceCapacityFooter = ({ users, elements, data, columns }: {
     return (
         <Table.Tfoot>
             <Table.Tr>
-                <Table.Th className={classes.sticky_footer} colSpan={2}>Resource Capacity (Actuals)</Table.Th>
+                <Table.Th className={`${classes.sticky_col} ${classes.sticky_col_1} ${classes.sticky_footer}`} style={{ zIndex: 1 }}>Resource Capacity (Actuals)</Table.Th>
+                <Table.Th className={`${classes.sticky_col} ${classes.sticky_col_2} ${classes.sticky_footer}`} style={{ zIndex: 1 }}></Table.Th>
                 <Table.Th className={classes.sticky_footer} colSpan={columns.length}></Table.Th>
             </Table.Tr>
             {activeUserIds.map(userId => {
