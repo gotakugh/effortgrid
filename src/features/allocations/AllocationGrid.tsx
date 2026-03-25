@@ -388,7 +388,7 @@ const GridRow = ({
     <>
       {/* Main WBS Element Row (Project, WorkPackage, or Activity summary) */}
       <Table.Tr>
-        <Table.Td className={classes.sticky_col}>
+        <Table.Td className={`${classes.sticky_col} ${classes.sticky_col_1}`} style={{width: 'var(--col-width-wbs)', minWidth: 'var(--col-width-wbs)'}}>
           <Group gap="xs" style={{ paddingLeft: level * 20 }}>
             {isActivity && (
               <Menu shadow="md" width={200}>
@@ -413,9 +413,9 @@ const GridRow = ({
           </Group>
         </Table.Td>
 
-        <Table.Td className={classes.sticky_col_data} style={{ width: '6rem', minWidth: '6rem' }}>{isActivity ? node.estimatedPv || '-' : (nodeTotalEstimated > 0 ? nodeTotalEstimated.toFixed(1) : '-')}</Table.Td>
+        <Table.Td className={`${classes.sticky_col} ${classes.sticky_col_2}`} style={{ width: '6rem', minWidth: '6rem' }}>{isActivity ? node.estimatedPv || '-' : (nodeTotalEstimated > 0 ? nodeTotalEstimated.toFixed(1) : '-')}</Table.Td>
         <Table.Td 
-            className={classes.sticky_col_data}
+            className={`${classes.sticky_col} ${classes.sticky_col_3}`}
             style={{ color: nodeTotalAllocated > nodeTotalEstimated ? 'var(--mantine-color-red-7)' : undefined, width: '6rem', minWidth: '6rem' }}
         >
             {nodeTotalAllocated > 0 ? nodeTotalAllocated.toFixed(1) : '-'}
@@ -450,14 +450,14 @@ const GridRow = ({
         
         return (
           <Table.Tr key={`${node.wbsElementId}-${userId}`}>
-            <Table.Td className={classes.sticky_col}>
+            <Table.Td className={`${classes.sticky_col} ${classes.sticky_col_1}`}>
               <Group gap="xs" style={{ paddingLeft: (level * 20) + 30 }}>
                 <Avatar size="sm" color={isUnassigned ? 'gray' : 'cyan'}>{isUnassigned ? '?' : user?.name.substring(0,2)}</Avatar>
                 <Text size="xs">{isUnassigned ? 'Unassigned' : (user?.name || `User ${userId}`)}</Text>
               </Group>
             </Table.Td>
-            <Table.Td className={classes.sticky_col_data} style={{ width: '6rem', minWidth: '6rem' }}></Table.Td>
-            <Table.Td className={classes.sticky_col_data} style={{ width: '6rem', minWidth: '6rem' }}>
+            <Table.Td className={`${classes.sticky_col} ${classes.sticky_col_2}`} style={{ width: '6rem', minWidth: '6rem' }}></Table.Td>
+            <Table.Td className={`${classes.sticky_col} ${classes.sticky_col_3}`} style={{ width: '6rem', minWidth: '6rem' }}>
                 {userTotalAllocated(userId) > 0 ? userTotalAllocated(userId).toFixed(1) : '-'}
             </Table.Td>
 
@@ -1013,17 +1013,24 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
           <Table className={classes.table} withColumnBorders>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th className={classes.sticky_col_header}>WBS Element</Table.Th>
-                <Table.Th className={classes.sticky_col_header} style={{left: 'var(--col-width-1)', width: '6rem', minWidth: '6rem'}}>Est. PV</Table.Th>
-                <Table.Th className={classes.sticky_col_header} style={{left: 'var(--col-width-2)', width: '6rem', minWidth: '6rem'}}>Allocated</Table.Th>
-                {daysInMonth.map((day) => {
-                  const isWeekend = day.day() === 0 || day.day() === 6;
+                <Table.Th className={`${classes.sticky_header} ${classes.sticky_col} ${classes.sticky_col_1}`} style={{width: 'var(--col-width-wbs)', minWidth: 'var(--col-width-wbs)', zIndex: 3}}>WBS Element</Table.Th>
+                <Table.Th className={`${classes.sticky_header} ${classes.sticky_col} ${classes.sticky_col_2}`} style={{width: '6rem', minWidth: '6rem', zIndex: 3}}>Est. PV</Table.Th>
+                <Table.Th className={`${classes.sticky_header} ${classes.sticky_col} ${classes.sticky_col_3}`} style={{width: '6rem', minWidth: '6rem', zIndex: 3}}>Allocated</Table.Th>
+                {columns.map((col) => {
+                  if (col.type === 'day') {
+                    const isWeekend = col.date.day() === 0 || col.date.day() === 6;
+                    return (
+                      <Table.Th key={col.key} className={`${classes.sticky_header} ${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}
+                        style={{width: '2.8rem', minWidth: '2.8rem', paddingLeft: 0, paddingRight: 0, textAlign: 'center'}}
+                      >
+                        <div>{col.date.format('ddd')}</div>
+                        <div>{col.date.format('D')}</div>
+                      </Table.Th>
+                    );
+                  }
                   return (
-                    <Table.Th key={day.format('YYYY-MM-DD')} className={`${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}
-                      style={{width: '2.5rem', minWidth: '2.5rem', paddingLeft: 0, paddingRight: 0, textAlign: 'center'}}
-                    >
-                      <div>{day.format('ddd')}</div>
-                      <div>{day.format('D')}</div>
+                    <Table.Th key={col.key} className={`${classes.sticky_header} ${classes.day_header}`} style={{minWidth: '7rem'}}>
+                      {col.label}
                     </Table.Th>
                   );
                 })}
