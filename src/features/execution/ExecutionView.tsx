@@ -273,7 +273,7 @@ const GridRow = ({
     <>
       {/* PV Row (Plan) */}
       <Table.Tr>
-        <Table.Td rowSpan={2} className={classes.sticky_col} style={{ verticalAlign: 'middle', borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
+        <Table.Td rowSpan={2} className={`${classes.sticky_col} ${classes.sticky_col_1}`} style={{ verticalAlign: 'middle', borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
           <Group gap="xs" style={{ paddingLeft: level * 20 }}>
             {isActivity && (
               <Menu shadow="md" width={200}>
@@ -351,7 +351,7 @@ const GridRow = ({
           <React.Fragment key={userId}>
             {/* User PV Row */}
             <Table.Tr>
-              <Table.Td rowSpan={2} className={classes.sticky_col} style={{ verticalAlign: 'middle', borderBottom: isLastUser ? '1px solid var(--mantine-color-gray-3)' : 'none' }}>
+              <Table.Td rowSpan={2} className={`${classes.sticky_col} ${classes.sticky_col_1}`} style={{ verticalAlign: 'middle', borderBottom: isLastUser ? '1px solid var(--mantine-color-gray-3)' : 'none' }}>
                 <Group gap="xs" style={{ paddingLeft: (level * 20) + 30 }}>
                   <Avatar size="sm" color={isUnassigned ? 'gray' : 'blue'}>{isUnassigned ? '?' : user?.name.substring(0,2)}</Avatar>
                   <Text size="xs">{isUnassigned ? 'Unassigned' : user?.name}</Text>
