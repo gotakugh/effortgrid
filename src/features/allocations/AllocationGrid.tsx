@@ -1037,27 +1037,25 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
       {error && <Alert title="Error" color="red" icon={<IconAlertCircle />}>{error}</Alert>}
 
       {!isLoading && !error && (
-        <Box className={classes.table_container}>
-          <Table className={classes.table} withColumnBorders style={{ zoom: zoomLevel } as any}>
+        <Box className={classes.table_container} style={{ '--zoom': zoomLevel } as React.CSSProperties}>
+          <Table className={classes.table} withColumnBorders verticalSpacing="0" horizontalSpacing="0">
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>WBS Element</Table.Th>
-                <Table.Th>Est. PV</Table.Th>
-                <Table.Th>Allocated</Table.Th>
+                <Table.Th className={classes.wbs_col}>WBS Element</Table.Th>
+                <Table.Th className={classes.total_col}>Est. PV</Table.Th>
+                <Table.Th className={classes.total_col}>Allocated</Table.Th>
                 {columns.map((col) => {
                   if (col.type === 'day') {
                     const isWeekend = col.date.day() === 0 || col.date.day() === 6;
                     return (
-                      <Table.Th key={col.key} className={`${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}
-                        style={{width: '2.8rem', minWidth: '2.8rem', paddingLeft: 0, paddingRight: 0, textAlign: 'center'}}
-                      >
+                      <Table.Th key={col.key} className={`${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}>
                         <div>{col.date.format('ddd')}</div>
                         <div>{col.date.format('D')}</div>
                       </Table.Th>
                     );
                   }
                   return (
-                    <Table.Th key={col.key} className={classes.day_header} style={{minWidth: '7rem'}}>
+                    <Table.Th key={col.key} className={classes.day_header}>
                       {col.label}
                     </Table.Th>
                   );

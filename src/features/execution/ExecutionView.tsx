@@ -274,7 +274,7 @@ const GridRow = ({
     <>
       {/* PV Row (Plan) */}
       <Table.Tr>
-        <Table.Td rowSpan={2} style={{ verticalAlign: 'middle', borderBottom: '1px solid var(--mantine-color-dark-4)', width: 350, minWidth: 350 }}>
+        <Table.Td rowSpan={2} className={classes.wbs_col} style={{ verticalAlign: 'middle', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>
           <Group gap="xs" style={{ paddingLeft: level * 20 }}>
             {isActivity && (
               <Menu shadow="md" width={200}>
@@ -357,7 +357,7 @@ const GridRow = ({
           <React.Fragment key={userId}>
             {/* User PV Row */}
             <Table.Tr>
-              <Table.Td rowSpan={2} style={{ verticalAlign: 'middle', borderBottom: isLastUser ? '1px solid var(--mantine-color-dark-4)' : 'none', width: 350, minWidth: 350 }}>
+              <Table.Td rowSpan={2} className={classes.wbs_col} style={{ verticalAlign: 'middle', borderBottom: isLastUser ? '1px solid var(--mantine-color-dark-4)' : 'none' }}>
                 <Group gap="xs" style={{ paddingLeft: (level * 20) + 30 }}>
                   <Avatar size="sm" color={isUnassigned ? 'gray' : 'blue'}>{isUnassigned ? '?' : user?.name.substring(0,2)}</Avatar>
                   <Text size="xs">{isUnassigned ? 'Unassigned' : user?.name}</Text>
@@ -931,26 +931,24 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
       {error && <Alert title="Error" color="red" icon={<IconAlertCircle />}>{error}</Alert>}
 
       {!isLoading && !error && (
-        <Box className={classes.table_container}>
-          <Table className={classes.table} withColumnBorders style={{ zoom: zoomLevel } as any}>
+        <Box className={classes.table_container} style={{ '--zoom': zoomLevel } as React.CSSProperties}>
+          <Table className={classes.table} withColumnBorders verticalSpacing="0" horizontalSpacing="0">
             <Table.Thead>
               <Table.Tr>
-                <Table.Th style={{width: 350, minWidth: 350}}>WBS Element</Table.Th>
-                <Table.Th style={{width: '6rem', minWidth: '6rem'}}>Total</Table.Th>
+                <Table.Th className={classes.wbs_col}>WBS Element</Table.Th>
+                <Table.Th className={classes.total_col}>Total</Table.Th>
                 {columns.map((col) => {
                   if (col.type === 'day') {
                     const isWeekend = col.date.day() === 0 || col.date.day() === 6;
                     return (
-                      <Table.Th key={col.key} className={`${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}
-                        style={{width: '2.8rem', minWidth: '2.8rem', paddingLeft: 0, paddingRight: 0, textAlign: 'center'}}
-                      >
+                      <Table.Th key={col.key} className={`${classes.day_header} ${isWeekend ? classes.day_header_weekend : ''}`}>
                         <div>{col.date.format('ddd')}</div>
                         <div>{col.date.format('D')}</div>
                       </Table.Th>
                     );
                   }
                   return (
-                    <Table.Th key={col.key} className={classes.day_header} style={{minWidth: '7rem'}}>
+                    <Table.Th key={col.key} className={classes.day_header}>
                       {col.label}
                     </Table.Th>
                   );
