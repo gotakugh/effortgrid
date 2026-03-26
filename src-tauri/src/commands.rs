@@ -175,6 +175,23 @@ pub struct ExecutionDataResult {
 
 use std::collections::HashMap;
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MappedImportRow {
+    pub hierarchy: Vec<String>, // L1〜L10まで、存在する階層の文字列配列
+    pub estimated_pv: Option<f64>,
+    pub assignee: Option<String>,
+    pub daily_pvs: HashMap<NaiveDate, f64>,
+    pub daily_acs: HashMap<NaiveDate, f64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportMappedWbsPayload {
+    pub plan_version_id: i64,
+    pub rows: Vec<MappedImportRow>,
+}
+
 
 // ----- Tauri Commands -----
 
