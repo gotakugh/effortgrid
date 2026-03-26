@@ -664,18 +664,18 @@ pub async fn import_mapped_wbs(
     pool: State<'_, SqlitePool>,
     payload: ImportMappedWbsPayload,
 ) -> AppResult<usize> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin().await.map_err(db::DbError::from)?;
     let plan_version_id = payload.plan_version_id;
 
     let portfolio_id: i64 =
         sqlx::query_scalar("SELECT portfolio_id FROM plan_versions WHERE id = ?")
             .bind(plan_version_id)
             .fetch_one(&mut *tx)
-            .await?;
+            .await.map_err(db::DbError::from)?;
 
     // Caches for performance
     let mut user_cache: HashMap<String, i64> = HashMap::new();
-    let users = db::list_users(&mut *tx).await.map_err(db::DbError::from)?;
+    let users = db::list_users(&mut tx).await?;
     for user in users {
         user_cache.insert(user.name.clone(), user.id);
     }
@@ -690,14 +690,22 @@ pub async fn import_mapped_wbs(
             if let Some(cached_id) = wbs_cache.get(&cache_key) {
                 parent_wbs_id = Some(*cached_id);
             } else {
-                let existing_element: Option<(i64,)> = sqlx::query_as(
-                    "SELECT wbs_element_id FROM wbs_element_details WHERE plan_version_id = ? AND title = ? AND parent_element_id "
-                )
-                .sql(if parent_wbs_id.is_some() { "= ?" } else { "IS NULL" })
-                .bind(plan_version_id)
-                .bind(title)
-                .bind(parent_wbs_id)
-                .fetch_optional(&mut *tx).await?;
+                let existing_element: Option<(i64,)> = if let Some(id) = parent_wbs_id {
+                    sqlx::query_as("SELECT wbs_element_id FROM wbs_element_details WHERE plan_version_id = ? AND title = ? AND parent_element_id = ?")
+                        .bind(plan_version_id)
+                        .bind(title)
+                        .bind(id)
+                        .fetch_optional(&mut tx)
+                        .await
+                        .map_err(db::DbError::from)?
+                } else {
+                    sqlx::query_as("SELECT wbs_element_id FROM wbs_element_details WHERE plan_version_id = ? AND title = ? AND parent_element_id IS NULL")
+                        .bind(plan_version_id)
+                        .bind(title)
+                        .fetch_optional(&mut tx)
+                        .await
+                        .map_err(db::DbError::from)?
+                };
 
                 let wbs_element_id = if let Some((id,)) = existing_element {
                     id
@@ -706,7 +714,7 @@ pub async fn import_mapped_wbs(
                         sqlx::query("INSERT INTO wbs_elements (portfolio_id) VALUES (?)")
                             .bind(portfolio_id)
                             .execute(&mut *tx)
-                            .await?
+                            .await.map_err(db::DbError::from)?
                             .last_insert_rowid();
 
                     let element_type = if i == 0 {
@@ -725,7 +733,7 @@ pub async fn import_mapped_wbs(
                     .bind(parent_wbs_id)
                     .bind(title)
                     .bind(element_type)
-                    .execute(&mut *tx).await?;
+                    .execute(&mut *tx).await.map_err(db::DbError::from)?;
                     
                     new_wbs_id
                 };
@@ -741,7 +749,7 @@ pub async fn import_mapped_wbs(
                     .bind(pv)
                     .bind(plan_version_id)
                     .bind(activity_wbs_id)
-                    .execute(&mut *tx).await?;
+                    .execute(&mut *tx).await.map_err(db::DbError::from)?;
             }
 
             // Get or create user
@@ -769,7 +777,7 @@ pub async fn import_mapped_wbs(
         }
     }
 
-    tx.commit().await?;
+    tx.commit().await.map_err(db::DbError::from)?;
     Ok(payload.rows.len())
 }
 
@@ -827,7 +835,7 @@ pub async fn delete_user(pool: State<'_, SqlitePool>, id: i64) -> AppResult<u64>
 
 #[tauri::command]
 pub async fn list_users(pool: State<'_, SqlitePool>) -> AppResult<Vec<User>> {
-    let users = db::list_users(&pool).await?;
+    let users = db::list_users(&*pool).await?;
     Ok(users)
 }
 

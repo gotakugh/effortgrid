@@ -374,7 +374,7 @@ pub async fn upsert_daily_allocation_tx(
         .bind(wbs_element_id)
         .bind(uid)
         .bind(date)
-        .fetch_optional(&mut *tx).await?
+        .fetch_optional(&mut **tx).await?
     } else {
         sqlx::query_scalar(
             "SELECT id FROM pv_allocations WHERE plan_version_id = ? AND wbs_element_id = ? AND user_id IS NULL AND start_date = ?",
@@ -382,7 +382,7 @@ pub async fn upsert_daily_allocation_tx(
         .bind(plan_version_id)
         .bind(wbs_element_id)
         .bind(date)
-        .fetch_optional(&mut *tx).await?
+        .fetch_optional(&mut **tx).await?
     };
 
     let pv_to_use = planned_value.filter(|&pv| pv > 0.0);
@@ -393,7 +393,7 @@ pub async fn upsert_daily_allocation_tx(
             sqlx::query("UPDATE pv_allocations SET planned_value = ? WHERE id = ?")
                 .bind(pv)
                 .bind(id)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
         }
         (Some(pv), None) => {
@@ -406,14 +406,14 @@ pub async fn upsert_daily_allocation_tx(
             .bind(date)
             .bind(date)
             .bind(pv)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
         }
         // Value is zero or None, so delete
         (None, Some(id)) => {
             sqlx::query("DELETE FROM pv_allocations WHERE id = ?")
                 .bind(id)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
         }
         // No value and no record, nothing to do
@@ -696,7 +696,7 @@ pub async fn upsert_actual_cost_tx(
     .bind(wbs_element_id)
     .bind(user_id)
     .bind(work_date)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
 
     let cost_to_use = actual_cost.filter(|&ac| ac > 0.0);
@@ -706,7 +706,7 @@ pub async fn upsert_actual_cost_tx(
             sqlx::query("UPDATE actual_costs SET actual_cost = ? WHERE id = ?")
                 .bind(ac)
                 .bind(id)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
         }
         (Some(ac), None) => {
@@ -717,13 +717,13 @@ pub async fn upsert_actual_cost_tx(
             .bind(user_id)
             .bind(work_date)
             .bind(ac)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
         }
         (None, Some(id)) => {
             sqlx::query("DELETE FROM actual_costs WHERE id = ?")
                 .bind(id)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
         }
         (None, None) => {}
@@ -947,13 +947,13 @@ pub async fn add_user_tx<'a>(
         .bind(role)
         .bind(email)
         .bind(daily_capacity)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?
         .last_insert_rowid();
 
     let new_user = sqlx::query_as("SELECT * FROM users WHERE id = ?")
         .bind(id)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await?;
 
     Ok(new_user)
