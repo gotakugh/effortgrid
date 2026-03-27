@@ -457,8 +457,8 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
         </Group>
       </Group>
 
-      <ScrollArea style={{ flex: 1 }}>
-        <Table>
+      <ScrollArea style={{ flex: 1, height: 'calc(100vh - 160px)' }}>
+        <Table stickyHeader>
           <Table.Thead>
           <Table.Tr>
             <Table.Th>WBS Title</Table.Th>
