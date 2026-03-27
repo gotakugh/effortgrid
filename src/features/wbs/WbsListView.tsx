@@ -18,6 +18,7 @@ import {
   Alert,
   Box,
   TagsInput,
+  ScrollArea,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useForm, zodResolver } from '@mantine/form';
@@ -125,7 +126,7 @@ function WbsElementRow({
   }, [element.children.length]);
 
   return (
-    <>
+    <Stack h="100%">
       <Table.Tr key={element.id}>
         <Table.Td>
           <div style={{ paddingLeft: level * 24 }}>
@@ -456,8 +457,9 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
         </Group>
       </Group>
 
-      <Table>
-        <Table.Thead>
+      <ScrollArea style={{ flex: 1 }}>
+        <Table>
+          <Table.Thead>
           <Table.Tr>
             <Table.Th>WBS Title</Table.Th>
             <Table.Th>Type</Table.Th>
@@ -480,6 +482,7 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
           ))}
         </Table.Tbody>
       </Table>
-    </>
+    </ScrollArea>
+    </Stack>
   );
 }
