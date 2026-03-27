@@ -23,7 +23,7 @@ import { useForm, zodResolver } from '@mantine/form';
 import { useDebouncedCallback, useDisclosure } from '@mantine/hooks';
 import { z } from 'zod';
 import { WbsElementDetail, WbsElementType } from '../../types';
-import { IconPlus, IconSitemap, IconCalendarStats } from '@tabler/icons-react';
+import { IconPlus, IconSitemap, IconCalendarStats, IconClipboardCopy } from '@tabler/icons-react';
 import { AllocationModal } from './AllocationModal';
 import { ImportWizardModal } from '../../components/ImportWizardModal';
 
@@ -247,6 +247,66 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
     }
   };
 
+  const handleCopyTsv = async () => {
+    const rows: string[][] = [];
+    const maxLevels = 10;
+    
+    // 1. ヘッダー行の作成
+    const header = ['WBS ID'];
+    for (let i = 1; i <= maxLevels; i++) header.push(`L${i}`);
+    header.push('Type', 'Est. PV', 'Description', 'Tags');
+    rows.push(header);
+
+    // WBSのパス（階層）を再構築するためのヘルパー
+    const elementMap = new Map(elements.map(e => [e.wbsElementId, e]));
+    const getElementPath = (elementId: number) => {
+      const path: string[] = [];
+      let currentId: number | null | undefined = elementId;
+      while (currentId != null) {
+        const el = elementMap.get(currentId);
+        if (el) {
+          path.unshift(el.title);
+          currentId = el.parentElementId;
+        } else {
+          break;
+        }
+      }
+      return path;
+    };
+
+    // 2. データ行の作成 (全要素)
+    elements.forEach(element => {
+      const path = getElementPath(element.wbsElementId);
+      const pathCols = Array(maxLevels).fill('');
+      path.forEach((p, i) => { if (i < maxLevels) pathCols[i] = p; });
+
+      let tagsStr = '';
+      try {
+        tagsStr = element.tags ? JSON.parse(element.tags).join(', ') : '';
+      } catch {
+        tagsStr = element.tags || '';
+      }
+
+      const row = [
+        String(element.wbsElementId),
+        ...pathCols,
+        element.elementType,
+        element.estimatedPv != null ? String(element.estimatedPv) : '',
+        element.description || '',
+        tagsStr,
+      ];
+      rows.push(row);
+    });
+
+    const tsvContent = rows.map(r => r.join('\t')).join('\n');
+    try {
+      await navigator.clipboard.writeText(tsvContent);
+      notifications.show({ title: 'Copied to Clipboard', message: 'WBS structure is ready to paste into Excel.', color: 'green' });
+    } catch (err) {
+      notifications.show({ title: 'Error', message: 'Failed to copy to clipboard.', color: 'red' });
+    }
+  };
+
   if (!planVersionId) {
     return (
       <Text c="dimmed" style={{ textAlign: 'center', paddingTop: '2rem' }}>
@@ -312,6 +372,9 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
       <Group justify="space-between" mb="md">
         <Title order={2}>WBS & Estimates</Title>
         <Group>
+          <Button variant="default" onClick={handleCopyTsv} leftSection={<IconClipboardCopy size={14} />} disabled={isReadOnly}>
+            Copy TSV
+          </Button>
           <Button variant="default" onClick={openImportWizard} disabled={isReadOnly}>
             Import
           </Button>

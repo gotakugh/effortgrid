@@ -3,9 +3,10 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   Group, Title, Text, Table, NumberInput, Badge, Box, Loader, Center, Alert, Stack, ActionIcon, Menu, Avatar, Tooltip, rem, SegmentedControl, Button,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useDisclosure } from '@mantine/hooks';
 import { MonthPickerInput } from '@mantine/dates';
-import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus, IconZoomOut, IconZoomIn, IconDownload } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus, IconZoomOut, IconZoomIn, IconClipboardCopy } from '@tabler/icons-react';
 import { WbsElementDetail, WbsElementType, PvAllocation, ActualCost, ExecutionData, User } from '../../types';
 import { useUsers } from '../../hooks/useUsers';
 import { ImportWizardModal } from '../../components/ImportWizardModal';
@@ -845,7 +846,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     }
   }, [activityRowIds, columnKeys, isReadOnly, fetchAllData, selectedCells, viewMode]);
 
-  const handleExportTsv = () => {
+  const handleCopyTsv = async () => {
     const rows: string[][] = [];
     const maxLevels = 10;
     
@@ -924,16 +925,13 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
       });
     });
 
-    // 3. TSVファイルのダウンロード生成
     const tsvContent = rows.map(r => r.join('\t')).join('\n');
-    const blob = new Blob([tsvContent], { type: 'text/tab-separated-values;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `effortgrid_actuals_${dayjs().format('YYYYMMDD')}.tsv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      await navigator.clipboard.writeText(tsvContent);
+      notifications.show({ title: 'Copied to Clipboard', message: 'Actual Costs (AC) data is ready to paste into Excel.', color: 'green' });
+    } catch (err) {
+      notifications.show({ title: 'Error', message: 'Failed to copy to clipboard.', color: 'red' });
+    }
   };
 
   useEffect(() => {
@@ -998,7 +996,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
             <Title order={2}>Execution Tracking (PV / AC)</Title>
             {!isReadOnly && (
               <>
-                <Button size="xs" variant="default" onClick={handleExportTsv} leftSection={<IconDownload size={14} />}>Export TSV</Button>
+                <Button size="xs" variant="default" onClick={handleCopyTsv} leftSection={<IconClipboardCopy size={14} />}>Copy TSV</Button>
                 <Button size="xs" variant="default" onClick={openImportWizard}>Import Data</Button>
               </>
             )}

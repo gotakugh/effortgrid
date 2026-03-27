@@ -20,9 +20,10 @@ import {
   SegmentedControl,
   Button,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useDisclosure } from '@mantine/hooks';
 import { MonthPickerInput } from '@mantine/dates';
-import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus, IconZoomOut, IconZoomIn } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus, IconZoomOut, IconZoomIn, IconClipboardCopy } from '@tabler/icons-react';
 import { WbsElementDetail, WbsElementType, PvAllocation, User } from '../../types';
 import { useUsers } from '../../hooks/useUsers';
 import { ImportWizardModal } from '../../components/ImportWizardModal';
@@ -689,6 +690,94 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
     }
   }, [planVersionId, isReadOnly, fetchAllData]);
 
+  const handleCopyTsv = async () => {
+    const rows: string[][] = [];
+    const maxLevels = 10;
+    
+    // 1. ヘッダー行の作成（自動マッピングに対応する完全一致のキーワード）
+    const header = ['WBS ID'];
+    for (let i = 1; i <= maxLevels; i++) header.push(`L${i}`);
+    header.push('Type', 'Est. PV', 'Assignee', 'Description', 'Tags');
+    
+    // 表示中の日次カラム（YYYY-MM-DD）のみを抽出
+    const dayColumns = columns.filter(c => c.type === 'day');
+    dayColumns.forEach(col => {
+      if (col.type === 'day') header.push(col.date.format('YYYY-MM-DD'));
+    });
+    rows.push(header);
+
+    // WBSのパス（階層）を取得するヘルパー
+    const getElementPath = (elementId: number) => {
+      const path: string[] = [];
+      let currentId: number | null | undefined = elementId;
+      while (currentId != null) {
+        const el = elements.find(e => e.wbsElementId === currentId);
+        if (el) {
+          path.unshift(el.title);
+          currentId = el.parentElementId;
+        } else {
+          break;
+        }
+      }
+      return path;
+    };
+
+    // 2. データ行の作成（Activityを対象とし、担当者ごとに展開）
+    const activities = elements.filter(e => e.elementType === 'Activity');
+    
+    activities.forEach(activity => {
+      const path = getElementPath(activity.wbsElementId);
+      const pathCols = Array(maxLevels).fill('');
+      path.forEach((p, i) => { if (i < maxLevels) pathCols[i] = p; });
+
+      // このActivityにアサインされているユーザー（未アサイン=0も含む）
+      const assignedUserIds = Array.from(assignedUsers[activity.wbsElementId] || []);
+      if (assignedUserIds.length === 0) assignedUserIds.push(0);
+
+      assignedUserIds.forEach(userId => {
+        const user = users.find(u => u.id === userId);
+        const userName = user ? user.name : (userId === 0 ? '' : `User ${userId}`);
+        
+        // TagsはJSON文字列で保存されているため展開する
+        let tagsStr = '';
+        try {
+          tagsStr = activity.tags ? JSON.parse(activity.tags).join(', ') : '';
+        } catch {
+          tagsStr = activity.tags || '';
+        }
+
+        const row = [
+          String(activity.wbsElementId),
+          ...pathCols,
+          activity.elementType,
+          activity.estimatedPv ? String(activity.estimatedPv) : '',
+          userName,
+          activity.description || '',
+          tagsStr
+        ];
+
+        // 日付ごとの予定(PV)を取得
+        dayColumns.forEach(col => {
+          if (col.type === 'day') {
+            const dateStr = col.date.format('YYYY-MM-DD');
+            const pvValue = allocations[activity.wbsElementId]?.[userId]?.[dateStr]?.pv;
+            row.push(pvValue ? String(pvValue) : '');
+          }
+        });
+
+        rows.push(row);
+      });
+    });
+
+    const tsvContent = rows.map(r => r.join('\t')).join('\n');
+    try {
+      await navigator.clipboard.writeText(tsvContent);
+      notifications.show({ title: 'Copied to Clipboard', message: 'Planned Value (PV) data is ready to paste into Excel.', color: 'green' });
+    } catch (err) {
+      notifications.show({ title: 'Error', message: 'Failed to copy to clipboard.', color: 'red' });
+    }
+  };
+
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
@@ -1006,7 +1095,12 @@ export function AllocationGrid({ planVersionId, isReadOnly }: GridProps) {
       <Group justify="space-between">
         <Group>
           <Title order={2}>Resource Allocation</Title>
-          {!isReadOnly && <Button size="xs" variant="default" onClick={openImportWizard}>Import Data</Button>}
+          {!isReadOnly && (
+            <>
+              <Button size="xs" variant="default" onClick={handleCopyTsv} leftSection={<IconClipboardCopy size={14} />}>Copy TSV</Button>
+              <Button size="xs" variant="default" onClick={openImportWizard}>Import Data</Button>
+            </>
+          )}
         </Group>
         <Group>
             <ActionIcon variant="default" onClick={() => setZoomLevel(prev => Math.max(0.5, prev - 0.1))}><IconZoomOut size={16} /></ActionIcon>
