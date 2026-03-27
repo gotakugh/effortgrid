@@ -5,7 +5,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { MonthPickerInput } from '@mantine/dates';
-import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus, IconZoomOut, IconZoomIn } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus, IconZoomOut, IconZoomIn, IconDownload } from '@tabler/icons-react';
 import { WbsElementDetail, WbsElementType, PvAllocation, ActualCost, ExecutionData, User } from '../../types';
 import { useUsers } from '../../hooks/useUsers';
 import { ImportWizardModal } from '../../components/ImportWizardModal';
@@ -845,6 +845,97 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     }
   }, [activityRowIds, columnKeys, isReadOnly, fetchAllData, selectedCells, viewMode]);
 
+  const handleExportTsv = () => {
+    const rows: string[][] = [];
+    const maxLevels = 10;
+    
+    // 1. ヘッダー行の作成（自動マッピングに対応する完全一致のキーワード）
+    const header = ['WBS ID'];
+    for (let i = 1; i <= maxLevels; i++) header.push(`L${i}`);
+    header.push('Type', 'Est. PV', 'Assignee', 'Description', 'Tags');
+    
+    // 表示中の日次カラム（YYYY-MM-DD）のみを抽出
+    const dayColumns = columns.filter(c => c.type === 'day');
+    dayColumns.forEach(col => {
+      if (col.type === 'day') header.push(col.date.format('YYYY-MM-DD'));
+    });
+    rows.push(header);
+
+    // WBSのパス（階層）を取得するヘルパー
+    const getElementPath = (elementId: number) => {
+      const path: string[] = [];
+      let currentId: number | null | undefined = elementId;
+      while (currentId != null) {
+        const el = elements.find(e => e.wbsElementId === currentId);
+        if (el) {
+          path.unshift(el.title);
+          currentId = el.parentElementId;
+        } else {
+          break;
+        }
+      }
+      return path;
+    };
+
+    // 2. データ行の作成（Activityを対象とし、担当者ごとに展開）
+    const activities = elements.filter(e => e.elementType === 'Activity');
+    
+    activities.forEach(activity => {
+      const path = getElementPath(activity.wbsElementId);
+      const pathCols = Array(maxLevels).fill('');
+      path.forEach((p, i) => { if (i < maxLevels) pathCols[i] = p; });
+
+      // このActivityにアサインされているユーザー（未アサイン=0も含む）
+      const assignedUserIds = Array.from(assignedUsers[activity.wbsElementId] || []);
+      if (assignedUserIds.length === 0) assignedUserIds.push(0);
+
+      assignedUserIds.forEach(userId => {
+        const user = users.find(u => u.id === userId);
+        const userName = user ? user.name : (userId === 0 ? '' : `User ${userId}`);
+        
+        // TagsはJSON文字列で保存されているため展開する
+        let tagsStr = '';
+        try {
+          tagsStr = activity.tags ? JSON.parse(activity.tags).join(', ') : '';
+        } catch {
+          tagsStr = activity.tags || '';
+        }
+
+        const row = [
+          String(activity.wbsElementId),
+          ...pathCols,
+          activity.elementType,
+          activity.estimatedPv ? String(activity.estimatedPv) : '',
+          userName,
+          activity.description || '',
+          tagsStr
+        ];
+
+        // 日付ごとの実績(AC)を取得
+        dayColumns.forEach(col => {
+          if (col.type === 'day') {
+            const dateStr = col.date.format('YYYY-MM-DD');
+            const acValue = executionData[activity.wbsElementId]?.[userId]?.[dateStr]?.ac?.value;
+            row.push(acValue ? String(acValue) : '');
+          }
+        });
+
+        rows.push(row);
+      });
+    });
+
+    // 3. TSVファイルのダウンロード生成
+    const tsvContent = rows.map(r => r.join('\t')).join('\n');
+    const blob = new Blob([tsvContent], { type: 'text/tab-separated-values;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `effortgrid_actuals_${dayjs().format('YYYYMMDD')}.tsv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   useEffect(() => {
     const handleCopy = (e: ClipboardEvent) => {
       if (selectedCells.size === 0 || !e.clipboardData || viewMode === 'weekly') return;
@@ -905,7 +996,12 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
       <Group justify="space-between">
         <Group>
             <Title order={2}>Execution Tracking (PV / AC)</Title>
-            {!isReadOnly && <Button size="xs" variant="default" onClick={openImportWizard}>Import Data</Button>}
+            {!isReadOnly && (
+              <>
+                <Button size="xs" variant="default" onClick={handleExportTsv} leftSection={<IconDownload size={14} />}>Export TSV</Button>
+                <Button size="xs" variant="default" onClick={openImportWizard}>Import Data</Button>
+              </>
+            )}
         </Group>
         <Group>
           <ActionIcon variant="default" onClick={() => setZoomLevel(prev => Math.max(0.5, prev - 0.1))}><IconZoomOut size={16} /></ActionIcon>
