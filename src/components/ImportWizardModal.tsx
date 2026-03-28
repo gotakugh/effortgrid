@@ -76,7 +76,7 @@ export function ImportWizardModal({
   const [previewRows, setPreviewRows] = useState<MappedImportRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
-  const [dateTarget, setDateTarget] = useState<'dailyPv' | 'dailyAc'>('dailyPv');
+  const [dateTarget, setDateTarget] = useState<string>('dailyPv');
 
   // 1. Parse raw text into headers and data rows
   useEffect(() => {
@@ -279,7 +279,7 @@ export function ImportWizardModal({
                 <SegmentedControl
                   size="xs"
                   value={dateTarget}
-                  onChange={(val) => setDateTarget(val as 'dailyPv' | 'dailyAc')}
+                  onChange={setDateTarget}
                   data={[
                       { label: 'Planned Value (PV)', value: 'dailyPv' },
                       { label: 'Actual Cost (AC)', value: 'dailyAc' },
