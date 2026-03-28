@@ -113,6 +113,17 @@ pub struct User {
 
 #[derive(Debug, Serialize, FromRow, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PlanMilestone {
+    pub id: i64,
+    pub plan_version_id: i64,
+    pub milestone_id: i64,
+    pub name: String,
+    pub target_date: String,
+    pub is_deleted: bool,
+}
+
+#[derive(Debug, Serialize, FromRow, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PvAllocation {
     pub id: i64,
     pub plan_version_id: i64,
@@ -301,14 +312,16 @@ pub async fn update_wbs_element_details(
     description: Option<&str>,
     element_type: WbsElementType,
     tags: Option<&str>,
+    milestone_id: Option<i64>,
 ) -> DbResult<u64> {
     let rows_affected = sqlx::query(
-        "UPDATE wbs_element_details SET title = ?, description = ?, element_type = ?, tags = ? WHERE id = ?"
+        "UPDATE wbs_element_details SET title = ?, description = ?, element_type = ?, tags = ?, milestone_id = ? WHERE id = ?"
     )
     .bind(title)
     .bind(description)
     .bind(&element_type)
     .bind(tags)
+    .bind(milestone_id)
     .bind(id)
     .execute(pool)
     .await?
@@ -996,4 +1009,36 @@ pub async fn delete_user(pool: &SqlitePool, id: i64) -> DbResult<u64> {
         .await?
         .rows_affected();
     Ok(rows_affected)
+}
+
+// ----- Milestone Management -----
+
+pub async fn list_plan_milestones(pool: &SqlitePool, plan_version_id: i64) -> DbResult<Vec<PlanMilestone>> {
+    let milestones = sqlx::query_as::<_, PlanMilestone>(
+        "SELECT * FROM plan_milestones WHERE plan_version_id = ? AND is_deleted = 0 ORDER BY target_date ASC"
+    ).bind(plan_version_id).fetch_all(pool).await?;
+    Ok(milestones)
+}
+
+pub async fn add_plan_milestone(pool: &SqlitePool, plan_version_id: i64, portfolio_id: i64, name: &str, target_date: &str) -> DbResult<PlanMilestone> {
+    let mut tx = pool.begin().await?;
+    let global_id = sqlx::query("INSERT INTO milestones (portfolio_id) VALUES (?)").bind(portfolio_id).execute(&mut *tx).await?.last_insert_rowid();
+    let id = sqlx::query("INSERT INTO plan_milestones (plan_version_id, milestone_id, name, target_date) VALUES (?, ?, ?, ?)").bind(plan_version_id).bind(global_id).bind(name).bind(target_date).execute(&mut *tx).await?.last_insert_rowid();
+    let milestone = sqlx::query_as::<_, PlanMilestone>("SELECT * FROM plan_milestones WHERE id = ?").bind(id).fetch_one(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(milestone)
+}
+
+pub async fn update_plan_milestone(pool: &SqlitePool, id: i64, name: &str, target_date: &str) -> DbResult<PlanMilestone> {
+    sqlx::query("UPDATE plan_milestones SET name = ?, target_date = ? WHERE id = ?").bind(name).bind(target_date).bind(id).execute(pool).await?;
+    let milestone = sqlx::query_as::<_, PlanMilestone>("SELECT * FROM plan_milestones WHERE id = ?").bind(id).fetch_one(pool).await?;
+    Ok(milestone)
+}
+
+pub async fn delete_plan_milestone(pool: &SqlitePool, id: i64, plan_version_id: i64) -> DbResult<u64> {
+    let mut tx = pool.begin().await?;
+    let rows = sqlx::query("UPDATE plan_milestones SET is_deleted = 1 WHERE id = ?").bind(id).execute(&mut *tx).await?.rows_affected();
+    sqlx::query("UPDATE wbs_element_details SET milestone_id = NULL WHERE plan_version_id = ? AND milestone_id = (SELECT milestone_id FROM plan_milestones WHERE id = ?)").bind(plan_version_id).bind(id).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(rows)
 }

@@ -60,6 +60,7 @@ pub struct UpdateWbsElementDetailsPayload {
     description: Option<String>,
     element_type: db::WbsElementType,
     tags: Option<Vec<String>>,
+    milestone_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -316,6 +317,7 @@ pub async fn update_wbs_element_details(
         payload.description.as_deref(),
         payload.element_type,
         tags_json.as_deref(),
+        payload.milestone_id,
     )
     .await?;
     Ok(())
@@ -921,6 +923,74 @@ pub async fn add_user(state: State<'_, crate::db::AppState>, payload: UserPayloa
         db::add_user(pool, &payload.name, &payload.role, payload.email.as_deref(), payload.daily_capacity)
             .await?;
     Ok(new_user)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddPlanMilestonePayload {
+    plan_version_id: i64,
+    portfolio_id: i64,
+    name: String,
+    target_date: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePlanMilestonePayload {
+    id: i64,
+    name: String,
+    target_date: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletePlanMilestonePayload {
+    id: i64,
+    plan_version_id: i64,
+}
+
+#[tauri::command]
+pub async fn list_plan_milestones(
+    state: State<'_, crate::db::AppState>,
+    plan_version_id: i64,
+) -> AppResult<Vec<db::PlanMilestone>> {
+    let pool_guard = state.pool.read().await;
+    let pool = pool_guard.as_ref().ok_or_else(|| AppError::DbError("No database is currently open".to_string()))?;
+    let milestones = db::list_plan_milestones(pool, plan_version_id).await?;
+    Ok(milestones)
+}
+
+#[tauri::command]
+pub async fn add_plan_milestone(
+    state: State<'_, crate::db::AppState>,
+    payload: AddPlanMilestonePayload,
+) -> AppResult<db::PlanMilestone> {
+    let pool_guard = state.pool.read().await;
+    let pool = pool_guard.as_ref().ok_or_else(|| AppError::DbError("No database is currently open".to_string()))?;
+    let milestone = db::add_plan_milestone(pool, payload.plan_version_id, payload.portfolio_id, &payload.name, &payload.target_date).await?;
+    Ok(milestone)
+}
+
+#[tauri::command]
+pub async fn update_plan_milestone(
+    state: State<'_, crate::db::AppState>,
+    payload: UpdatePlanMilestonePayload,
+) -> AppResult<db::PlanMilestone> {
+    let pool_guard = state.pool.read().await;
+    let pool = pool_guard.as_ref().ok_or_else(|| AppError::DbError("No database is currently open".to_string()))?;
+    let milestone = db::update_plan_milestone(pool, payload.id, &payload.name, &payload.target_date).await?;
+    Ok(milestone)
+}
+
+#[tauri::command]
+pub async fn delete_plan_milestone(
+    state: State<'_, crate::db::AppState>,
+    payload: DeletePlanMilestonePayload,
+) -> AppResult<u64> {
+    let pool_guard = state.pool.read().await;
+    let pool = pool_guard.as_ref().ok_or_else(|| AppError::DbError("No database is currently open".to_string()))?;
+    let rows = db::delete_plan_milestone(pool, payload.id, payload.plan_version_id).await?;
+    Ok(rows)
 }
 
 #[tauri::command]

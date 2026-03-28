@@ -24,7 +24,7 @@ import { notifications } from '@mantine/notifications';
 import { useForm, zodResolver } from '@mantine/form';
 import { useDebouncedCallback, useDisclosure } from '@mantine/hooks';
 import { z } from 'zod';
-import { WbsElementDetail, WbsElementType } from '../../types';
+import { WbsElementDetail, WbsElementType, PlanMilestone } from '../../types';
 import { IconPlus, IconSitemap, IconCalendarStats, IconClipboardCopy } from '@tabler/icons-react';
 import { AllocationModal } from './AllocationModal';
 import { ImportWizardModal } from '../../components/ImportWizardModal';
@@ -48,18 +48,21 @@ const addElementSchema = z.object({
 function WbsElementRow({
   element,
   level,
+  milestones,
   onAddChild,
   onOpenAllocation,
   isReadOnly,
 }: {
   element: TreeNode;
   level: number;
+  milestones: PlanMilestone[];
   onAddChild: (parent: WbsElementDetail) => void;
   onOpenAllocation: (element: WbsElementDetail) => void;
   isReadOnly: boolean;
 }) {
   const [title, setTitle] = useState(element.title);
   const [description, setDescription] = useState(element.description || '');
+  const [milestoneId, setMilestoneId] = useState<number | null>(element.milestoneId);
   const [elementType, setElementType] = useState(element.elementType);
   const [tags, setTags] = useState<string[]>(() => {
     try {
@@ -81,8 +84,8 @@ function WbsElementRow({
     }
   }, 1000);
 
-  const handleDetailChange = <K extends 'title' | 'description' | 'elementType' | 'tags'>(field: K, value: any) => {
-    const currentState = { title, description, elementType, tags };
+  const handleDetailChange = <K extends 'title' | 'description' | 'elementType' | 'tags' | 'milestoneId'>(field: K, value: any) => {
+    const currentState = { title, description, elementType, tags, milestoneId };
     
     if (field === 'title') {
       setTitle(value);
@@ -96,6 +99,9 @@ function WbsElementRow({
     } else if (field === 'tags') {
       setTags(value);
       currentState.tags = value;
+    } else if (field === 'milestoneId') {
+      setMilestoneId(value);
+      currentState.milestoneId = value;
     }
 
     debouncedUpdateDetails(currentState);
@@ -145,6 +151,20 @@ function WbsElementRow({
             onChange={(val) => val && handleDetailChange('elementType', val as WbsElementType)}
             variant="unstyled"
             readOnly={isReadOnly}
+          />
+        </Table.Td>
+        <Table.Td>
+          <Select
+            data={[
+              { value: '', label: 'None' },
+              ...milestones.map(m => ({ value: String(m.milestoneId), label: m.name }))
+            ]}
+            value={milestoneId ? String(milestoneId) : ''}
+            onChange={(val) => handleDetailChange('milestoneId', val ? Number(val) : null)}
+            variant="unstyled"
+            readOnly={isReadOnly}
+            searchable
+            clearable
           />
         </Table.Td>
         <Table.Td>
@@ -209,6 +229,7 @@ function WbsElementRow({
           key={child.id}
           element={child}
           level={level + 1}
+          milestones={milestones}
           onAddChild={onAddChild}
           onOpenAllocation={onOpenAllocation}
           isReadOnly={isReadOnly}
@@ -224,6 +245,7 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
   const [allocModalOpened, { open: openAllocModal, close: closeAllocModal }] =
     useDisclosure(false);
   const [activeElement, setActiveElement] = useState<WbsElementDetail | null>(null);
+  const [milestones, setMilestones] = useState<PlanMilestone[]>([]);
   const [importWizardOpened, { open: openImportWizard, close: closeImportWizard }] = useDisclosure(false);
 
   const fetchElements = useCallback(async () => {
@@ -238,13 +260,25 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
     }
   }, [planVersionId]);
 
+  const fetchMilestones = useCallback(async () => {
+    if (!planVersionId) return;
+    try {
+      const result = await invoke<PlanMilestone[]>('list_plan_milestones', { planVersionId });
+      setMilestones(result);
+    } catch (error) {
+      console.error('Failed to fetch milestones:', error);
+    }
+  }, [planVersionId]);
+
   useEffect(() => {
     if (planVersionId) {
       fetchElements();
+      fetchMilestones();
     } else {
       setElements([]);
+      setMilestones([]);
     }
-  }, [planVersionId, fetchElements]);
+  }, [planVersionId, fetchElements, fetchMilestones]);
 
   const tree = useMemo(() => {
     const items = [...elements];
@@ -463,6 +497,7 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
           <Table.Tr>
             <Table.Th>WBS Title</Table.Th>
             <Table.Th>Type</Table.Th>
+            <Table.Th>Milestone</Table.Th>
             <Table.Th>Estimated PV</Table.Th>
             <Table.Th>Description</Table.Th>
             <Table.Th>Tags</Table.Th>
@@ -475,6 +510,7 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
               key={node.id}
               element={node}
               level={0}
+              milestones={milestones}
               onAddChild={handleOpenAddModal}
               onOpenAllocation={handleOpenAllocModal}
               isReadOnly={isReadOnly}

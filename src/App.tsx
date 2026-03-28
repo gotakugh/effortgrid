@@ -22,12 +22,13 @@ import { Notifications } from '@mantine/notifications';
 import { useDisclosure } from '@mantine/hooks';
 import { useForm, zodResolver } from '@mantine/form';
 import { z } from 'zod';
-import { IconPlus, IconTree, IconLayoutDashboard, IconCalendarStats, IconDeviceFloppy, IconBriefcase, IconUsers, IconDatabase } from '@tabler/icons-react';
+import { IconPlus, IconTree, IconLayoutDashboard, IconCalendarStats, IconDeviceFloppy, IconBriefcase, IconUsers, IconDatabase, IconFlag } from '@tabler/icons-react';
 import { Portfolio, PlanVersion, AppSettings } from './types';
 import { WbsListView } from './features/wbs/WbsListView';
 import { AllocationGrid } from './features/allocations/AllocationGrid';
 import { ExecutionView } from './features/execution/ExecutionView';
 import { DashboardView } from './features/dashboard/DashboardView';
+import { MilestoneView } from './features/milestones/MilestoneView';
 import { UserManagementView } from './features/users/UserManagementView';
 
 const createPortfolioSchema = z.object({
@@ -371,6 +372,13 @@ function App() {
             active={activeView === 'users'}
             onClick={() => setActiveView('users')}
           />
+          <NavLink
+            href="#"
+            label="Milestones"
+            leftSection={<IconFlag size="1rem" />}
+            active={activeView === 'milestones'}
+            onClick={() => setActiveView('milestones')}
+          />
           {/* ... other nav links from UI_DESIGN.md */}
           <Button onClick={openCreateModal} fullWidth leftSection={<IconPlus size={14} />} mt="xl">
             New Portfolio
@@ -406,6 +414,7 @@ function App() {
           {activeView === 'wbs' && <WbsListView planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} isReadOnly={isReadOnly} />}
           {activeView === 'allocations' && <AllocationGrid planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} isReadOnly={isReadOnly} />}
           {activeView === 'execution' && <ExecutionView planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} isReadOnly={isReadOnly} />}
+          {activeView === 'milestones' && <MilestoneView planVersionId={selectedPlanVersionId ? Number(selectedPlanVersionId) : null} isReadOnly={isReadOnly} portfolioId={selectedPortfolioId ? Number(selectedPortfolioId) : null} />}
           {activeView === 'users' && <UserManagementView />}
         </AppShell.Main>
       </AppShell>
