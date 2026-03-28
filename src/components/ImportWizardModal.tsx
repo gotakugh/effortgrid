@@ -279,7 +279,7 @@ export function ImportWizardModal({
                 <SegmentedControl
                   size="xs"
                   value={dateTarget}
-                  onChange={setDateTarget as (value: 'dailyPv' | 'dailyAc') => void}
+                  onChange={(val) => setDateTarget(val as 'dailyPv' | 'dailyAc')}
                   data={[
                       { label: 'Planned Value (PV)', value: 'dailyPv' },
                       { label: 'Actual Cost (AC)', value: 'dailyAc' },
@@ -356,7 +356,7 @@ export function ImportWizardModal({
         )}
         <Group justify="flex-end">
           <Button variant="default" onClick={handleClose}>Cancel</Button>
-          <Button onClick={handleImport} disabled={isReadOnly || previewRows.length === 0 || !!error || isImporting}>
+          <Button onClick={() => { handleImport(); }} disabled={isReadOnly || previewRows.length === 0 || !!error || isImporting}>
             Import {previewRows.length} WBS Rows
           </Button>
         </Group>
