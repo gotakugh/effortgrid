@@ -279,7 +279,7 @@ export function ImportWizardModal({
                 <SegmentedControl
                   size="xs"
                   value={dateTarget}
-                  onChange={setDateTarget}
+                  onChange={(val) => setDateTarget(val)}
                   data={[
                       { label: 'Planned Value (PV)', value: 'dailyPv' },
                       { label: 'Actual Cost (AC)', value: 'dailyAc' },
