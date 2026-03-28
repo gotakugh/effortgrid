@@ -120,6 +120,7 @@ export interface MappedImportRow {
   assignee: string | null;
   description: string | null;
   tags: string[] | null;
+  milestone: string | null;
   elementType: WbsElementType | null;
   dailyPvs: Record<string, number>;
   dailyAcs: Record<string, number>;

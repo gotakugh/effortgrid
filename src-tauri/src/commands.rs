@@ -192,6 +192,7 @@ pub struct MappedImportRow {
     pub hierarchy: Vec<String>, // L1〜L10まで、存在する階層の文字列配列
     pub estimated_pv: Option<f64>,
     pub assignee: Option<String>,
+    pub milestone: Option<String>,
     pub description: Option<String>,
     pub tags: Option<Vec<String>>,
     pub element_type: Option<db::WbsElementType>,
@@ -765,6 +766,15 @@ pub async fn import_mapped_wbs(
     for user in users {
         user_cache.insert(user.name.clone(), user.id);
     }
+    
+    let mut milestone_cache: HashMap<String, i64> = HashMap::new();
+    let existing_milestones: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT milestone_id, name FROM plan_milestones WHERE plan_version_id = ?"
+    ).bind(plan_version_id).fetch_all(&mut *tx).await.map_err(db::DbError::from)?;
+    for (m_id, name) in existing_milestones {
+        milestone_cache.insert(name, m_id);
+    }
+
     let mut wbs_cache: HashMap<(Option<i64>, String), i64> = HashMap::new();
 
     for row in &payload.rows {
@@ -815,12 +825,30 @@ pub async fn import_mapped_wbs(
         };
 
         if let Some(activity_wbs_id) = activity_wbs_id_opt {
+            // --- Handle Milestone ---
+            let mut current_milestone_id: Option<i64> = None;
+            if let Some(m_name) = &row.milestone {
+                if let Some(&m_id) = milestone_cache.get(m_name) {
+                    current_milestone_id = Some(m_id);
+                } else {
+                    let new_m_id = sqlx::query("INSERT INTO milestones (portfolio_id) VALUES (?)")
+                        .bind(portfolio_id).execute(&mut *tx).await.map_err(db::DbError::from)?
+                        .last_insert_rowid();
+                    sqlx::query("INSERT INTO plan_milestones (plan_version_id, milestone_id, name, target_date) VALUES (?, ?, ?, ?)")
+                        .bind(plan_version_id).bind(new_m_id).bind(m_name).bind("")
+                        .execute(&mut *tx).await.map_err(db::DbError::from)?;
+                    milestone_cache.insert(m_name.clone(), new_m_id);
+                    current_milestone_id = Some(new_m_id);
+                }
+            }
+
             // --- Update details for the identified WBS element ---
             let mut updates: Vec<&str> = Vec::new();
             if row.description.is_some() { updates.push("description = ?"); }
             if row.tags.is_some() { updates.push("tags = ?"); }
             if row.element_type.is_some() { updates.push("element_type = ?"); }
             if row.estimated_pv.is_some() { updates.push("estimated_pv = ?"); }
+            if row.milestone.is_some() { updates.push("milestone_id = ?"); }
             
             if !updates.is_empty() {
                 let sql = format!("UPDATE wbs_element_details SET {} WHERE plan_version_id = ? AND wbs_element_id = ?", updates.join(", "));
@@ -832,6 +860,7 @@ pub async fn import_mapped_wbs(
                 }
                 if let Some(et) = &row.element_type { query = query.bind(et); }
                 if let Some(pv) = row.estimated_pv { query = query.bind(pv); }
+                if row.milestone.is_some() { query = query.bind(current_milestone_id); }
 
                 query.bind(plan_version_id).bind(activity_wbs_id)
                     .execute(&mut *tx).await.map_err(db::DbError::from)?;

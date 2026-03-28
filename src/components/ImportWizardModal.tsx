@@ -35,6 +35,7 @@ const MAPPING_TYPES = [
   })),
   { value: 'estimatedPv', label: 'Est. PV' },
   { value: 'assignee', label: 'Assignee' },
+  { value: 'milestone', label: 'Milestone' },
   { value: 'description', label: 'Description' },
   { value: 'tags', label: 'Tags' },
   { value: 'elementType', label: 'Type' },
@@ -105,6 +106,7 @@ export function ImportWizardModal({
       if (lcHeader === 'wbs id') return { type: 'wbsId' };
       if (lcHeader === 'est. pv') return { type: 'estimatedPv' };
       if (lcHeader === 'assignee') return { type: 'assignee' };
+      if (lcHeader === 'milestone') return { type: 'milestone' };
       if (lcHeader === 'description') return { type: 'description' };
       if (lcHeader === 'tags') return { type: 'tags' };
       if (lcHeader === 'type') return { type: 'elementType' };
@@ -177,6 +179,7 @@ export function ImportWizardModal({
         if (wbsIdStr && isNaN(wbsId!)) throw new Error(`Row ${rowIndex + 2}: Invalid number for WBS ID`);
 
         const description = getVal('description');
+        const milestone = getVal('milestone');
         const elementType = getVal('elementType') as WbsElementType | null; // Basic cast, no validation yet
         const tagsStr = getVal('tags');
         const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()) : null;
@@ -203,7 +206,7 @@ export function ImportWizardModal({
             }
         });
 
-        return { wbsId, hierarchy, estimatedPv, assignee, description, tags, elementType, dailyPvs, dailyAcs };
+        return { wbsId, hierarchy, estimatedPv, assignee, milestone, description, tags, elementType, dailyPvs, dailyAcs };
       });
       setPreviewRows(newPreviewRows);
     } catch (e: any) {
@@ -331,6 +334,7 @@ export function ImportWizardModal({
                         <Table.Th>Hierarchy</Table.Th>
                         <Table.Th>Est. PV</Table.Th>
                         <Table.Th>Assignee</Table.Th>
+                        <Table.Th>Milestone</Table.Th>
                         <Table.Th>Daily Data Count</Table.Th>
                     </Table.Tr>
                 </Table.Thead>
@@ -344,6 +348,7 @@ export function ImportWizardModal({
                             </Table.Td>
                             <Table.Td>{row.estimatedPv}</Table.Td>
                             <Table.Td>{row.assignee}</Table.Td>
+                            <Table.Td>{row.milestone}</Table.Td>
                             <Table.Td>
                                 {Object.keys(row.dailyPvs).length > 0 && `PV: ${Object.keys(row.dailyPvs).length}`}
                                 {Object.keys(row.dailyAcs).length > 0 && ` AC: ${Object.keys(row.dailyAcs).length}`}
