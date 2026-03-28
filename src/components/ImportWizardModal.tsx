@@ -43,8 +43,9 @@ const MAPPING_TYPES = [
 ];
 
 const DATE_FORMATS = [
-  'YYYY-MM-DD', 'YYYY/MM/DD', 'M/D/YYYY', 'M/D/YY',
-  'MM/DD/YYYY', 'MM/DD/YY', 'DD-MMM-YY', 'DD-MMM-YYYY'
+  'YYYY-MM-DD', 'YYYY-M-D', 'YYYY/MM/DD', 'YYYY/M/D', 
+  'M/D/YYYY', 'M/D/YY', 'MM/DD/YYYY', 'MM/DD/YY', 
+  'DD-MMM-YY', 'DD-MMM-YYYY'
 ];
 
 interface ColumnMap {
