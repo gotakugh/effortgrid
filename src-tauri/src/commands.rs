@@ -3,6 +3,7 @@ use crate::db::{
     Portfolio, ProgressUpdate, PvAllocation, SqlitePool, User, WbsElementDetail,
 };
 use crate::evm;
+use crate::settings::{self, AppSettings};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -874,4 +875,15 @@ pub async fn get_filterable_wbs_nodes(
 ) -> AppResult<Vec<WbsElementDetail>> {
     let nodes = db::get_filterable_wbs_nodes(&pool, plan_version_id).await?;
     Ok(nodes)
+}
+
+#[tauri::command]
+pub async fn get_settings(app_handle: tauri::AppHandle) -> Result<crate::settings::AppSettings, String> {
+    Ok(crate::settings::load_settings(&app_handle))
+}
+
+#[tauri::command]
+pub async fn update_settings(app_handle: tauri::AppHandle, settings: crate::settings::AppSettings) -> Result<(), String> {
+    crate::settings::save_settings(&app_handle, &settings)?;
+    Ok(())
 }

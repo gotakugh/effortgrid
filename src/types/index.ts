@@ -124,3 +124,19 @@ export interface MappedImportRow {
   dailyPvs: Record<string, number>;
   dailyAcs: Record<string, number>;
 }
+
+export interface DisplaySettings {
+  theme: string;
+  defaultZoom: number;
+}
+
+export interface ProjectSettings {
+  dashboard?: any;
+  searchPresets?: any;
+}
+
+export interface AppSettings {
+  recentDbPaths: string[];
+  display: DisplaySettings;
+  projectSettings: Record<string, ProjectSettings>;
+}

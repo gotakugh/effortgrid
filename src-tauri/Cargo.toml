@@ -25,4 +25,5 @@ serde_json = "1"
 sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-native-tls", "chrono"] }
 thiserror = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
+tauri-plugin-dialog = "2"
 

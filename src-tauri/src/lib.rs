@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod evm;
+mod settings;
 
 use tauri::Manager;
 
@@ -13,6 +14,7 @@ fn greet(name: &str) -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -51,6 +53,8 @@ pub fn run() {
             commands::get_execution_data,
             commands::import_mapped_wbs,
             commands::get_filterable_wbs_nodes,
+            commands::get_settings,
+            commands::update_settings,
             // User Management Commands
             commands::list_users,
             commands::add_user,
