@@ -320,11 +320,19 @@ const GridRow = React.memo(({
     return Object.values(unassignedData).some(d => d.pv && d.pv > 0);
   }, [data, node.wbsElementId]);
 
+  const activityDescendants = useMemo(() => {
+    const descendantIds = new Set<number>();
+    const traverse = (n: TreeNode) => {
+        descendantIds.add(n.wbsElementId);
+        if (n.children) {
+            n.children.forEach(traverse);
+        }
+    };
+    traverse(node);
+    return allElements.filter(el => descendantIds.has(el.wbsElementId) && el.elementType === 'Activity');
+  }, [node, allElements]);
+
   const getRollupValue = (column: Column, type: 'pv' | 'ac'): number => {
-    const getIds = (n: TreeNode): number[] => [n.wbsElementId, ...n.children.flatMap(getIds)];
-    const descendantIds = getIds(node);
-    const activityDescendants = allElements.filter(el => descendantIds.includes(el.wbsElementId) && el.elementType === 'Activity');
-    
     return activityDescendants.reduce((sum, activity) => {
       const activityData = data[activity.wbsElementId];
       if (!activityData) return sum;
@@ -342,18 +350,7 @@ const GridRow = React.memo(({
   };
 
   const { nodeTotalAllocated, nodeTotalActuals } = useMemo(() => {
-    const getDescendantActivityIds = (startNode: TreeNode): number[] => {
-        let ids: number[] = [];
-        const stack: TreeNode[] = [startNode];
-        while (stack.length > 0) {
-            const currentNode = stack.pop()!;
-            if (currentNode.elementType === 'Activity') ids.push(currentNode.wbsElementId);
-            currentNode.children.forEach(child => stack.push(child));
-        }
-        return ids;
-    };
-    const activityIds = getDescendantActivityIds(node);
-
+    const activityIds = activityDescendants.map(a => a.wbsElementId);
     const totalAllocated = allPlanAllocations
         .filter(alloc => activityIds.includes(alloc.wbsElementId))
         .reduce((sum, alloc) => sum + alloc.plannedValue, 0);
@@ -363,13 +360,9 @@ const GridRow = React.memo(({
         .reduce((sum, ac) => sum + ac.actualCost, 0);
         
     return { nodeTotalAllocated: totalAllocated, nodeTotalActuals: totalActuals };
-  }, [node, allPlanAllocations, allPlanActuals]);
+  }, [activityDescendants, allPlanAllocations, allPlanActuals]);
 
   const getRollupProgress = (dateStr?: string): number | null => {
-    const getIds = (n: TreeNode): number[] => [n.wbsElementId, ...n.children.flatMap(getIds)];
-    const descendantIds = getIds(node);
-    const activityDescendants = allElements.filter(el => descendantIds.includes(el.wbsElementId) && el.elementType === 'Activity');
-    
     let totalBac = 0;
     let totalEv = 0;
     let hasAnyProgress = false;
@@ -380,13 +373,14 @@ const GridRow = React.memo(({
       if (bac > 0) {
         const activityProgress = progressData[activity.wbsElementId];
         if (activityProgress) {
-          let dates = Object.keys(activityProgress);
-          if (dateStr) {
-              dates = dates.filter(d => d <= dateStr);
+          const dates = Object.keys(activityProgress);
+          let latestDate: string | null = null;
+          for (const d of dates) {
+            if ((!dateStr || d <= dateStr) && (!latestDate || d > latestDate)) {
+              latestDate = d;
+            }
           }
-          dates.sort();
-          if (dates.length > 0) {
-            const latestDate = dates[dates.length - 1];
+          if (latestDate) {
             const percent = activityProgress[latestDate].value;
             totalEv += bac * (percent / 100.0);
             hasAnyProgress = true;
@@ -451,11 +445,14 @@ const GridRow = React.memo(({
         <Table.Td className={`${classes.total_col} ${classes.readonly_cell}`} style={{ borderBottom: 'none' }}>
           <Text size="sm" c="dimmed">{nodeTotalAllocated > 0 ? nodeTotalAllocated.toFixed(1) : ''}</Text>
         </Table.Td>
-        {columns.map((col) => (
-          <Table.Td key={`${col.key}-pv`} className={`${classes.data_cell} ${classes.readonly_cell}`} style={{ textAlign: 'right', borderBottom: 'none' }}>
-            <Text size="sm" c="dimmed">{getRollupValue(col, 'pv') > 0 ? getRollupValue(col, 'pv').toFixed(1) : ''}</Text>
-          </Table.Td>
-        ))}
+        {columns.map((col) => {
+          const val = getRollupValue(col, 'pv');
+          return (
+            <Table.Td key={`${col.key}-pv`} className={`${classes.data_cell} ${classes.readonly_cell}`} style={{ textAlign: 'right', borderBottom: 'none' }}>
+              <Text size="sm" c="dimmed">{val > 0 ? val.toFixed(1) : ''}</Text>
+            </Table.Td>
+          );
+        })}
       </Table.Tr>
 
       {/* --- 2nd Row: AC --- */}
@@ -466,11 +463,14 @@ const GridRow = React.memo(({
             {nodeTotalActuals > 0 ? nodeTotalActuals.toFixed(1) : ''}
           </Text>
         </Table.Td>
-        {columns.map((col) => (
-          <Table.Td key={`${col.key}-ac`} className={`${classes.data_cell} ${classes.readonly_cell}`} style={{ borderTop: 'none', borderBottom: 'none', textAlign: 'right' }}>
-            <Text size="sm" fw={500}>{getRollupValue(col, 'ac') > 0 ? getRollupValue(col, 'ac').toFixed(1) : ''}</Text>
-          </Table.Td>
-        ))}
+        {columns.map((col) => {
+          const val = getRollupValue(col, 'ac');
+          return (
+            <Table.Td key={`${col.key}-ac`} className={`${classes.data_cell} ${classes.readonly_cell}`} style={{ borderTop: 'none', borderBottom: 'none', textAlign: 'right' }}>
+              <Text size="sm" fw={500}>{val > 0 ? val.toFixed(1) : ''}</Text>
+            </Table.Td>
+          );
+        })}
       </Table.Tr>
 
       {/* --- 3rd Row: Progress --- */}
