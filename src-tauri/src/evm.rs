@@ -264,7 +264,7 @@ pub async fn calculate_s_curve_data(
         }
         Granularity::Weekly => {
             while current_date <= end_date {
-                let end_of_week = current_date + Duration::days(6 - current_date.weekday().num_days_from_sunday() as i64);
+                let end_of_week = current_date + Duration::days(6 - current_date.weekday().num_days_from_monday() as i64);
                 date_points.push(if end_of_week > end_date { end_date } else { end_of_week });
                 current_date = end_of_week + Duration::days(1);
             }
