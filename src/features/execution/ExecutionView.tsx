@@ -76,14 +76,16 @@ const ProgressInputCell = React.memo(({ wbsElementId, date, initialValue, onComm
       <input
         type="number"
         className={classes.ac_input_native}
-        style={{ paddingRight: '16px', cursor: 'cell' }}
+        style={{ paddingRight: '16px', cursor: 'cell', color: value !== '' ? 'var(--mantine-color-teal-4)' : undefined }}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onBlur={handleBlur}
         step="1" min="0" max="100"
         readOnly={isReadOnly}
       />
-      <span style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: 'var(--mantine-color-dimmed)', pointerEvents: 'none' }}>%</span>
+      {value !== '' && (
+        <span style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: 'var(--mantine-color-teal-4)', pointerEvents: 'none' }}>%</span>
+      )}
     </div>
   );
 });
@@ -110,9 +112,8 @@ const PvInputCell = React.memo(({ wbsElementId, userId, date, initialPv, onCommi
       type="number"
       className={classes.ac_input_native}
       style={{
-        backgroundColor: 'transparent',
         cursor: 'cell',
-        color: 'var(--mantine-color-dimmed)'
+        color: 'var(--mantine-color-blue-3)'
       }}
       value={value}
       onChange={(e) => setValue(e.target.value)}
@@ -150,7 +151,6 @@ const AcInputCell = React.memo(({ wbsElementId, userId, date, initialAc, onCommi
       type="number"
       className={classes.ac_input_native}
       style={{
-        backgroundColor: 'transparent',
         cursor: 'cell'
       }}
       value={value}
@@ -425,13 +425,13 @@ const GridRow = React.memo(({
         </Table.Td>
         <Table.Td className={`${classes.metric_col} ${classes.readonly_cell}`} style={{ borderBottom: 'none' }}>PV</Table.Td>
         <Table.Td className={`${classes.total_col} ${classes.readonly_cell}`} style={{ borderBottom: 'none' }}>
-          <Text size="sm" c="dimmed">{nodeTotalAllocated > 0 ? nodeTotalAllocated.toFixed(1) : ''}</Text>
+          <Text size="sm" c="blue.3">{nodeTotalAllocated > 0 ? nodeTotalAllocated.toFixed(1) : ''}</Text>
         </Table.Td>
         {columns.map((col) => {
           const val = getRollupValue(col, 'pv');
           return (
             <Table.Td key={`${col.key}-pv`} className={`${classes.data_cell} ${classes.readonly_cell}`} style={{ textAlign: 'right', borderBottom: 'none' }}>
-              <Text size="sm" c="dimmed">{val > 0 ? val.toFixed(1) : ''}</Text>
+              <Text size="sm" c="blue.3">{val > 0 ? val.toFixed(1) : ''}</Text>
             </Table.Td>
           );
         })}
@@ -459,7 +459,7 @@ const GridRow = React.memo(({
       <Table.Tr>
         <Table.Td className={classes.metric_col} style={{ borderTop: 'none', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>Prog.</Table.Td>
         <Table.Td className={classes.total_col} style={{ borderTop: 'none', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>
-            <Text size="sm" fw={500}>
+            <Text size="sm" fw={500} c="teal.4">
                 {isActivity 
                     ? (latestProgress !== null ? `${latestProgress}%` : '') 
                     : (getRollupProgress() !== null ? `${getRollupProgress()?.toFixed(1)}%` : '')
@@ -536,7 +536,7 @@ const GridRow = React.memo(({
               </Table.Td>
               <Table.Td className={`${classes.metric_col} ${classes.readonly_cell}`} style={{ borderBottom: 'none' }}>PV</Table.Td>
               <Table.Td className={classes.total_col} style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
-                <Text size="sm" c="dimmed">{totalAllocatedForUser > 0 ? totalAllocatedForUser.toFixed(1) : ''}</Text>
+                <Text size="sm" c="blue.3">{totalAllocatedForUser > 0 ? totalAllocatedForUser.toFixed(1) : ''}</Text>
               </Table.Td>
               {columns.map((col, dayIndex) => {
                 const ganttClassesPv = [];
@@ -564,7 +564,7 @@ const GridRow = React.memo(({
                         onMouseOver={onCellMouseOver}
                       />
                     ) : (
-                      <div style={{ padding: '0 var(--mantine-spacing-xs)', minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: 'var(--mantine-color-dimmed)'}}>
+                      <div style={{ padding: '0 var(--mantine-spacing-xs)', minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: 'var(--mantine-color-blue-3)'}}>
                         {value > 0 ? value.toFixed(1) : ''}
                       </div>
                     )}
@@ -652,7 +652,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
       current.forEach(id => {
           if (!newSelection.has(id)) {
               const el = document.getElementById(id);
-              if (el) el.style.backgroundColor = 'transparent';
+              if (el) el.style.backgroundColor = '';
           }
       });
       newSelection.forEach(id => {
