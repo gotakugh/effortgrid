@@ -82,13 +82,57 @@ const ProgressInputCell = ({ wbsElementId, date, initialValue, onCommit, isReadO
     />
   );
 };
+const PvInputCell = ({ wbsElementId, userId, date, initialPv, onCommit, isReadOnly, onKeyDown, onPaste, onMouseDown, onMouseOver, isSelected }: {
+  wbsElementId: number; userId: number; date: string; initialPv?: number; isReadOnly: boolean;
+  onCommit: (value: number | null) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
+  onPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
+  onMouseDown: (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
+  onMouseOver: (wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
+  isSelected: boolean;
+}) => {
+  const [value, setValue] = useState<string | number>(initialPv ?? '');
+  useEffect(() => { setValue(initialPv ?? ''); }, [initialPv]);
+
+  const handleBlur = () => {
+    const numericValue = value === '' ? null : Number(value);
+    const initialNumericValue = initialPv ?? null;
+    if (numericValue !== initialNumericValue) onCommit(numericValue);
+  };
+
+  return (
+    <NumberInput
+      id={`cell-pv-${wbsElementId}-${userId}-${date}`}
+      classNames={{ input: classes.ac_input }}
+      style={{
+        backgroundColor: isSelected ? 'var(--mantine-color-blue-light)' : 'transparent',
+        height: '100%',
+      }}
+      styles={{
+        wrapper: { height: '100%' },
+        input: { height: '100%', cursor: 'cell', textAlign: 'right', paddingRight: 'var(--mantine-spacing-xs)', color: 'var(--mantine-color-dimmed)' }
+      }}
+      value={value}
+      onChange={setValue}
+      onBlur={handleBlur}
+      onKeyDown={(e) => onKeyDown(e, wbsElementId, userId, date, 'pv')}
+      onPaste={(e) => onPaste(e, wbsElementId, userId, date, 'pv')}
+      onMouseDown={(e) => onMouseDown(e, wbsElementId, userId, date, 'pv')}
+      onMouseOver={() => onMouseOver(wbsElementId, userId, date, 'pv')}
+      step={0.1} min={0} hideControls
+      readOnly={isReadOnly}
+      variant="unstyled"
+    />
+  );
+};
+
 const AcInputCell = ({ wbsElementId, userId, date, initialAc, onCommit, isReadOnly, onKeyDown, onPaste, onMouseDown, onMouseOver, isSelected }: {
   wbsElementId: number; userId: number; date: string; initialAc?: number; isReadOnly: boolean;
   onCommit: (value: number | null) => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => void;
-  onPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => void;
-  onMouseDown: (e: React.MouseEvent<HTMLInputElement>) => void;
-  onMouseOver: () => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
+  onPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
+  onMouseDown: (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
+  onMouseOver: (wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
   isSelected: boolean;
 }) => {
   const [value, setValue] = useState<string | number>(initialAc ?? '');
@@ -115,10 +159,10 @@ const AcInputCell = ({ wbsElementId, userId, date, initialAc, onCommit, isReadOn
       value={value}
       onChange={setValue}
       onBlur={handleBlur}
-      onKeyDown={(e) => onKeyDown(e, wbsElementId, userId, date)}
-      onPaste={(e) => onPaste(e, wbsElementId, userId, date)}
-      onMouseDown={onMouseDown}
-      onMouseOver={onMouseOver}
+      onKeyDown={(e) => onKeyDown(e, wbsElementId, userId, date, 'ac')}
+      onPaste={(e) => onPaste(e, wbsElementId, userId, date, 'ac')}
+      onMouseDown={(e) => onMouseDown(e, wbsElementId, userId, date, 'ac')}
+      onMouseOver={() => onMouseOver(wbsElementId, userId, date, 'ac')}
       step={0.1} min={0} hideControls
       readOnly={isReadOnly}
       variant="unstyled"
@@ -209,19 +253,20 @@ const ResourceCapacityFooter = ({ users, elements, data, columns }: {
 
 const GridRow = ({ 
     node, level, columns, data, progressData, allElements, allPlanAllocations, allPlanActuals, users, assignedUsersMap,
-    onAcChange, onProgressChange, isReadOnly, onAddUser,
+    onPvChange, onAcChange, onProgressChange, isReadOnly, onAddUser,
     onCellKeyDown, onCellPaste, onCellMouseDown, onCellMouseOver, selectedCells 
 }: {
   node: TreeNode; level: number; columns: Column[]; data: ExecutionMap; progressData: { [wbsId: number]: { [date: string]: { id: number; value: number } } }; allElements: WbsElementDetail[]; allPlanAllocations: PvAllocation[]; allPlanActuals: ActualCost[]; users: User[];
   assignedUsersMap: { [wbsId: number]: Set<number> };
+  onPvChange: (wbsElementId: number, userId: number, date: string, value: number | null) => void;
   onAcChange: (wbsElementId: number, userId: number, date: string, value: number | null) => void;
   onProgressChange: (wbsElementId: number, date: string, value: number | null) => void;
   isReadOnly: boolean;
   onAddUser: (wbsElementId: number, userId: number) => void;
-  onCellKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => void;
-  onCellPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => void;
-  onCellMouseDown: (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => void;
-  onCellMouseOver: (wbsElementId: number, userId: number, date: string) => void;
+  onCellKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
+  onCellPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
+  onCellMouseDown: (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
+  onCellMouseOver: (wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
   selectedCells: Set<string>;
 }) => {
   const isActivity = node.elementType === 'Activity';
@@ -486,12 +531,30 @@ const GridRow = ({
                     if (dayIndex === pvStartIndex) ganttClassesPv.push(classes.ganttEdgeStartPv);
                     if (dayIndex === pvEndIndex) ganttClassesPv.push(classes.ganttEdgeEndPv);
                 }
+                const dateStr = col.key;
+                const cellId = `cell-pv-${node.wbsElementId}-${userId}-${dateStr}`;
+
                 const value = col.type === 'day'
                     ? data[node.wbsElementId]?.[userId]?.[col.date.format('YYYY-MM-DD')]?.pv || 0
                     : col.dates.reduce((sum, d) => sum + (data[node.wbsElementId]?.[userId]?.[d.format('YYYY-MM-DD')]?.pv || 0), 0);
                 return (
-                  <Table.Td key={`${col.key}-pv`} className={`${classes.data_cell} ${ganttClassesPv.join(' ')}`} style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
-                    <Text size="sm" c="dimmed">{value > 0 ? value.toFixed(1) : ''}</Text>
+                  <Table.Td key={`${col.key}-pv`} className={`${classes.data_cell} ${ganttClassesPv.join(' ')}`} style={{ padding: 0, verticalAlign: 'middle', borderBottom: 'none' }}>
+                    {col.type === 'day' ? (
+                      <PvInputCell
+                        wbsElementId={node.wbsElementId} userId={userId} date={dateStr}
+                        initialPv={value}
+                        onCommit={(value) => onPvChange(node.wbsElementId, userId, dateStr, value)}
+                        isReadOnly={isReadOnly}
+                        onKeyDown={onCellKeyDown} onPaste={onCellPaste}
+                        onMouseDown={onCellMouseDown}
+                        onMouseOver={onCellMouseOver}
+                        isSelected={selectedCells.has(cellId)}
+                      />
+                    ) : (
+                      <div style={{ padding: '0 var(--mantine-spacing-xs)', minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: 'var(--mantine-color-dimmed)'}}>
+                        {value > 0 ? value.toFixed(1) : ''}
+                      </div>
+                    )}
                   </Table.Td>
                 )
               })}
@@ -532,8 +595,8 @@ const GridRow = ({
                         onCommit={(value) => onAcChange(node.wbsElementId, userId, dateStr, value)}
                         isReadOnly={isReadOnly || isUnassigned}
                         onKeyDown={onCellKeyDown} onPaste={onCellPaste}
-                        onMouseDown={(e) => onCellMouseDown(e, node.wbsElementId, userId, dateStr)}
-                        onMouseOver={() => onCellMouseOver(node.wbsElementId, userId, dateStr)}
+                        onMouseDown={onCellMouseDown}
+                        onMouseOver={onCellMouseOver}
                         isSelected={selectedCells.has(cellId)}
                       />
                     ) : (
@@ -550,7 +613,7 @@ const GridRow = ({
       })}
 
       {/* Child WBS Element Rows */}
-      {node.children.map((child) => <GridRow key={child.id} node={child} level={level + 1} columns={columns} data={data} progressData={progressData} allElements={allElements} allPlanAllocations={allPlanAllocations} allPlanActuals={allPlanActuals} users={users} assignedUsersMap={assignedUsersMap} onAcChange={onAcChange} onProgressChange={onProgressChange} onAddUser={onAddUser} isReadOnly={isReadOnly} onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste} onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver} selectedCells={selectedCells} />)}
+      {node.children.map((child) => <GridRow key={child.id} node={child} level={level + 1} columns={columns} data={data} progressData={progressData} allElements={allElements} allPlanAllocations={allPlanAllocations} allPlanActuals={allPlanActuals} users={users} assignedUsersMap={assignedUsersMap} onPvChange={onPvChange} onAcChange={onAcChange} onProgressChange={onProgressChange} onAddUser={onAddUser} isReadOnly={isReadOnly} onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste} onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver} selectedCells={selectedCells} />)}
     </>
   );
 };
@@ -737,6 +800,39 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     };
   }, [tree, columns, assignedUsers, executionData]);
 
+  const handlePvChange = useCallback(async (wbsElementId: number, userId: number, date: string, value: number | null) => {
+    if (isReadOnly || !planVersionId) return;
+
+    setExecutionData(prev => {
+        const newData = JSON.parse(JSON.stringify(prev));
+        const ensurePath = (wbsId: number, uId: number, d: string) => {
+            if (!newData[wbsId]) newData[wbsId] = {};
+            if (!newData[wbsId][uId]) newData[wbsId][uId] = {};
+            if (!newData[wbsId][uId][d]) newData[wbsId][uId][d] = {};
+        };
+        ensurePath(wbsElementId, userId, date);
+
+        if (value !== null && value > 0) {
+            newData[wbsElementId][userId][date].pv = value;
+        } else {
+            if(newData[wbsElementId]?.[userId]?.[date]?.pv) {
+                delete newData[wbsElementId][userId][date].pv;
+            }
+        }
+        return newData;
+    });
+
+    try {
+      await invoke('upsert_daily_allocation', { payload: { planVersionId, wbsElementId, userId: userId === 0 ? null : userId, date, plannedValue: value } });
+      // This change might de-sync totals, so we refetch all allocations.
+      const newAllocs = await invoke<PvAllocation[]>('list_all_allocations_for_plan_version', { planVersionId });
+      setAllPlanAllocations(newAllocs);
+    } catch (error) { 
+        console.error('Failed to upsert daily allocation:', error); 
+        fetchAllData(); // revert on error
+    }
+  }, [isReadOnly, planVersionId, fetchAllData]);
+
   const handleAcChange = useCallback(async (wbsElementId: number, userId: number, date: string, value: number | null) => {
     if (isReadOnly) return;
 
@@ -794,7 +890,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     }
   }, [isReadOnly, fetchAllData]);
   
-  const focusCell = (wbsElementId: number, userId: number, date: string) => document.getElementById(`cell-ac-${wbsElementId}-${userId}-${date}`)?.focus();
+  const focusCell = (wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => document.getElementById(`cell-${metricType}-${wbsElementId}-${userId}-${date}`)?.focus();
 
   const handleAddUserToActivity = (wbsElementId: number, userId: number) => {
     setAssignedUsers(prev => {
@@ -806,11 +902,11 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     });
   };
 
-  const handleCellMouseDown = (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => {
+  const handleCellMouseDown = (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => {
     e.preventDefault();
     e.currentTarget.focus();
     setIsSelecting(true);
-    const cellId = `cell-ac-${wbsElementId}-${userId}-${date}`;
+    const cellId = `cell-${metricType}-${wbsElementId}-${userId}-${date}`;
     const findRowIndex = (wbsId: number, uId: number) => activityRowIds.findIndex(r => r.wbsId === wbsId && r.userId === uId);
 
     if (e.shiftKey && selectionAnchor) {
@@ -838,7 +934,8 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
         for (let r = minRow; r <= maxRow; r++) {
             for (let c = minCol; c <= maxCol; c++) {
                 const rowInfo = activityRowIds[r];
-                newSelectedCells.add(`cell-ac-${rowInfo.wbsId}-${rowInfo.userId}-${columnKeys[c]}`);
+                const type = selectionAnchor?.split('-')[1] ?? metricType;
+                newSelectedCells.add(`cell-${type}-${rowInfo.wbsId}-${rowInfo.userId}-${columnKeys[c]}`);
             }
         }
         setSelectedCells(newSelectedCells);
@@ -848,8 +945,11 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     }
   };
 
-  const handleCellMouseOver = (wbsElementId: number, userId: number, date: string) => {
+  const handleCellMouseOver = (wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => {
     if (!isSelecting || !selectionAnchor) return;
+    
+    const anchorType = selectionAnchor.split('-')[1];
+    if (anchorType !== metricType) return;
     
     const findRowIndex = (wbsId: number, uId: number) => activityRowIds.findIndex(r => r.wbsId === wbsId && r.userId === uId);
     const startIdParts = selectionAnchor.split('-');
@@ -873,13 +973,13 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     for (let r = minRow; r <= maxRow; r++) {
         for (let c = minCol; c <= maxCol; c++) {
             const rowInfo = activityRowIds[r];
-            newSelectedCells.add(`cell-ac-${rowInfo.wbsId}-${rowInfo.userId}-${columnKeys[c]}`);
+            newSelectedCells.add(`cell-${metricType}-${rowInfo.wbsId}-${rowInfo.userId}-${columnKeys[c]}`);
         }
     }
     setSelectedCells(newSelectedCells);
   };
 
-  const handleCellKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => {
+  const handleCellKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => {
     const { key } = e;
     if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Delete', 'Backspace'].includes(key) || viewMode === 'weekly') return;
     e.preventDefault();
@@ -889,108 +989,164 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     const colIndex = columnKeys.indexOf(date);
 
     if (key === 'ArrowUp' && rowIndex > 0) {
-      const { wbsId, userId } = activityRowIds[rowIndex - 1];
-      focusCell(wbsId, userId, date);
+      const { wbsId, userId: newUserId } = activityRowIds[rowIndex - 1];
+      focusCell(wbsId, newUserId, date, metricType);
     } else if (key === 'ArrowDown' && rowIndex < activityRowIds.length - 1) {
-      const { wbsId, userId } = activityRowIds[rowIndex + 1];
-      focusCell(wbsId, userId, date);
+      const { wbsId, userId: newUserId } = activityRowIds[rowIndex + 1];
+      focusCell(wbsId, newUserId, date, metricType);
     } else if (key === 'ArrowLeft' && colIndex > 0) {
-      focusCell(wbsElementId, userId, columnKeys[colIndex - 1]);
+      focusCell(wbsElementId, userId, columnKeys[colIndex - 1], metricType);
     } else if (key === 'ArrowRight' && colIndex < columnKeys.length - 1) {
-      focusCell(wbsElementId, userId, columnKeys[colIndex + 1]);
+      focusCell(wbsElementId, userId, columnKeys[colIndex + 1], metricType);
     } else if (key === 'Delete' || key === 'Backspace') {
-        const cellsToUpdate = selectedCells.size > 1 ? selectedCells : new Set([`cell-ac-${wbsElementId}-${userId}-${date}`]);
-        const costs = Array.from(cellsToUpdate).map(cellId => {
-            const parts = cellId.split('-');
-            const wbsId = Number(parts[2]);
-            const uId = Number(parts[3]);
-            const d = parts.slice(4).join('-');
-            return { wbsElementId: wbsId, userId: uId, workDate: d, actualCost: null };
-        });
-
-        // Optimistic UI update
-        setExecutionData(prev => {
-            const newData = JSON.parse(JSON.stringify(prev));
-            costs.forEach(item => {
-                if (newData[item.wbsElementId]?.[item.userId]?.[item.workDate]?.ac) {
-                    delete newData[item.wbsElementId][item.userId][item.workDate].ac;
-                }
+        const cellsToUpdate = selectedCells.size > 1 ? selectedCells : new Set([`cell-${metricType}-${wbsElementId}-${userId}-${date}`]);
+        
+        if (metricType === 'ac') {
+            const costs = Array.from(cellsToUpdate).map(cellId => {
+                const parts = cellId.split('-');
+                return { wbsElementId: Number(parts[2]), userId: Number(parts[3]), workDate: parts.slice(4).join('-'), actualCost: null };
             });
-            return newData;
-        });
 
-        invoke('upsert_actual_costs_bulk', { payload: { costs } })
-            .catch(err => { console.error("Bulk delete failed:", err); fetchAllData(); });
+            setExecutionData(prev => {
+                const newData = JSON.parse(JSON.stringify(prev));
+                costs.forEach(item => {
+                    if (newData[item.wbsElementId]?.[item.userId]?.[item.workDate]?.ac) {
+                        delete newData[item.wbsElementId][item.userId][item.workDate].ac;
+                    }
+                });
+                return newData;
+            });
+            invoke('upsert_actual_costs_bulk', { payload: { costs } }).catch(err => { console.error("Bulk delete failed:", err); fetchAllData(); });
+        } else { // 'pv'
+            if (!planVersionId) return;
+            const allocations = Array.from(cellsToUpdate).map(cellId => {
+                const parts = cellId.split('-');
+                const uId = Number(parts[3]);
+                return { wbsElementId: Number(parts[2]), userId: uId === 0 ? null : uId, date: parts.slice(4).join('-'), plannedValue: null };
+            });
+            
+            setExecutionData(prev => {
+                const newData = JSON.parse(JSON.stringify(prev));
+                allocations.forEach(item => {
+                    const uId = item.userId ?? 0;
+                    if (newData[item.wbsElementId]?.[uId]?.[item.date]?.pv) {
+                        delete newData[item.wbsElementId][uId][item.date].pv;
+                    }
+                });
+                return newData;
+            });
+            invoke('upsert_daily_allocations_bulk', { payload: { planVersionId, allocations } })
+              .then(async () => {
+                  const newAllocs = await invoke<PvAllocation[]>('list_all_allocations_for_plan_version', { planVersionId });
+                  setAllPlanAllocations(newAllocs);
+              })
+              .catch(err => { console.error("Bulk PV delete failed:", err); fetchAllData(); });
+        }
     }
-  }, [activityRowIds, columnKeys, selectedCells, fetchAllData, viewMode]);
+  }, [activityRowIds, columnKeys, selectedCells, fetchAllData, viewMode, planVersionId]);
 
-  const handleCellPaste = useCallback(async (e: React.ClipboardEvent<HTMLInputElement>, startWbsId: number, startUserId: number, startDate: string) => {
+  const handleCellPaste = useCallback(async (e: React.ClipboardEvent<HTMLInputElement>, startWbsId: number, startUserId: number, startDate: string, metricType: 'pv' | 'ac') => {
     e.preventDefault();
-    if (isReadOnly || viewMode === 'weekly') return;
+    if (isReadOnly || viewMode === 'weekly' || !planVersionId) return;
 
     const pasteData = e.clipboardData.getData('text');
     const findRowIndex = (wbsId: number, uId: number) => activityRowIds.findIndex(r => r.wbsId === wbsId && r.userId === uId);
-    let costs: { wbsElementId: number, userId: number, workDate: string, actualCost: number | null }[] = [];
 
-    if (selectedCells.size > 1 && !pasteData.includes('\t') && !pasteData.includes('\n') && !pasteData.includes('\r')) {
-        const valueStr = pasteData.trim();
-        const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
-        costs = Array.from(selectedCells).map(cellId => {
-            const parts = cellId.split('-');
-            return { wbsElementId: Number(parts[2]), userId: Number(parts[3]), workDate: parts.slice(4).join('-'), actualCost: value };
-        });
-    } else {
+    if (metricType === 'ac') {
+      let costs: { wbsElementId: number, userId: number, workDate: string, actualCost: number | null }[] = [];
+      if (selectedCells.size > 1 && !pasteData.includes('\t') && !pasteData.includes('\n') && !pasteData.includes('\r')) {
+          const valueStr = pasteData.trim();
+          const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
+          costs = Array.from(selectedCells).map(cellId => {
+              const parts = cellId.split('-');
+              return { wbsElementId: Number(parts[2]), userId: Number(parts[3]), workDate: parts.slice(4).join('-'), actualCost: value };
+          });
+      } else {
+          const rows = pasteData.split(/\r\n|\n|\r/);
+          const startRIdx = findRowIndex(startWbsId, startUserId);
+          const startCIdx = columnKeys.indexOf(startDate);
+          if (startRIdx === -1 || startCIdx === -1) return;
+
+          for (let i = 0; i < rows.length; i++) {
+              const rowData = rows[i].split('\t');
+              const rIdx = startRIdx + i;
+              if (rIdx >= activityRowIds.length) break;
+              const { wbsId, userId } = activityRowIds[rIdx];
+
+              for (let j = 0; j < rowData.length; j++) {
+                  const cIdx = startCIdx + j;
+                  if (cIdx >= columnKeys.length) break;
+                  const value = !isNaN(parseFloat(rowData[j])) ? parseFloat(rowData[j]) : null;
+                  costs.push({ wbsElementId: wbsId, userId, workDate: columnKeys[cIdx], actualCost: value });
+              }
+          }
+      }
+      if (costs.length === 0) return;
+
+      setExecutionData(prev => {
+          const newData = JSON.parse(JSON.stringify(prev));
+          costs.forEach(item => {
+              const ensurePath = (wbsId: number, uId: number, d: string) => { if (!newData[wbsId]) newData[wbsId] = {}; if (!newData[wbsId][uId]) newData[wbsId][uId] = {}; if (!newData[wbsId][uId][d]) newData[wbsId][uId][d] = {}; };
+              ensurePath(item.wbsElementId, item.userId, item.workDate);
+              if(item.actualCost !== null && item.actualCost > 0) { newData[item.wbsElementId][item.userId][item.workDate].ac = { id: -1, value: item.actualCost }; } 
+              else { if(newData[item.wbsElementId]?.[item.userId]?.[item.workDate]?.ac) { delete newData[item.wbsElementId][item.userId][item.workDate].ac; } }
+          });
+          return newData;
+      });
+
+      try { await invoke('upsert_actual_costs_bulk', { payload: { costs } }); fetchAllData(); } 
+      catch (err) { console.error("Bulk AC paste failed:", err); fetchAllData(); }
+    } else { // 'pv'
+      let allocations: { wbsElementId: number, userId: number | null, date: string, plannedValue: number | null }[] = [];
+      if (selectedCells.size > 1 && !pasteData.includes('\t') && !pasteData.includes('\n') && !pasteData.includes('\r')) {
+          const valueStr = pasteData.trim();
+          const value = !isNaN(parseFloat(valueStr)) ? parseFloat(valueStr) : null;
+          allocations = Array.from(selectedCells).map(cellId => {
+              const parts = cellId.split('-');
+              const uId = Number(parts[3]);
+              return { wbsElementId: Number(parts[2]), userId: uId === 0 ? null : uId, date: parts.slice(4).join('-'), plannedValue: value };
+          });
+      } else {
         const rows = pasteData.split(/\r\n|\n|\r/);
         const startRIdx = findRowIndex(startWbsId, startUserId);
         const startCIdx = columnKeys.indexOf(startDate);
         if (startRIdx === -1 || startCIdx === -1) return;
 
         for (let i = 0; i < rows.length; i++) {
-            const rowData = rows[i].split('\t');
-            const rIdx = startRIdx + i;
-            if (rIdx >= activityRowIds.length) break;
-            const { wbsId, userId } = activityRowIds[rIdx];
+          const rowData = rows[i].split('\t');
+          const rIdx = startRIdx + i;
+          if (rIdx >= activityRowIds.length) break;
+          const { wbsId, userId } = activityRowIds[rIdx];
 
-            for (let j = 0; j < rowData.length; j++) {
-                const cIdx = startCIdx + j;
-                if (cIdx >= columnKeys.length) break;
-                const value = !isNaN(parseFloat(rowData[j])) ? parseFloat(rowData[j]) : null;
-                costs.push({ wbsElementId: wbsId, userId, workDate: columnKeys[cIdx], actualCost: value });
-            }
+          for (let j = 0; j < rowData.length; j++) {
+            const cIdx = startCIdx + j;
+            if (cIdx >= columnKeys.length) break;
+            const value = !isNaN(parseFloat(rowData[j])) ? parseFloat(rowData[j]) : null;
+            allocations.push({ wbsElementId: wbsId, userId: userId === 0 ? null : userId, date: columnKeys[cIdx], plannedValue: value });
+          }
         }
-    }
-    
-    if (costs.length === 0) return;
+      }
+      if (allocations.length === 0) return;
 
-    // Optimistic UI update
-    setExecutionData(prev => {
+      setExecutionData(prev => {
         const newData = JSON.parse(JSON.stringify(prev));
-        costs.forEach(item => {
-            const ensurePath = (wbsId: number, uId: number, d: string) => {
-                if (!newData[wbsId]) newData[wbsId] = {};
-                if (!newData[wbsId][uId]) newData[wbsId][uId] = {};
-                if (!newData[wbsId][uId][d]) newData[wbsId][uId][d] = {};
-            };
-            ensurePath(item.wbsElementId, item.userId, item.workDate);
-            if(item.actualCost !== null && item.actualCost > 0) {
-                newData[item.wbsElementId][item.userId][item.workDate].ac = { id: -1, value: item.actualCost };
-            } else {
-                if(newData[item.wbsElementId]?.[item.userId]?.[item.workDate]?.ac) {
-                    delete newData[item.wbsElementId][item.userId][item.workDate].ac;
-                }
-            }
+        allocations.forEach(item => {
+            const uId = item.userId ?? 0;
+            const ensurePath = (wbsId: number, uId: number, d: string) => { if (!newData[wbsId]) newData[wbsId] = {}; if (!newData[wbsId][uId]) newData[wbsId][uId] = {}; if (!newData[wbsId][uId][d]) newData[wbsId][uId][d] = {}; };
+            ensurePath(item.wbsElementId, uId, item.date);
+            if (item.plannedValue !== null && item.plannedValue > 0) { newData[item.wbsElementId][uId][item.date].pv = item.plannedValue; }
+            else { if (newData[item.wbsElementId]?.[uId]?.[item.date]?.pv) { delete newData[item.wbsElementId][uId][item.date].pv; }}
         });
         return newData;
-    });
+      });
 
-    try {
-        await invoke('upsert_actual_costs_bulk', { payload: { costs } });
-        fetchAllData(); // Re-sync with DB to get correct IDs
-    } catch (err) {
-        console.error("Bulk paste failed:", err);
-        fetchAllData(); // Revert on error
+      try { 
+        await invoke('upsert_daily_allocations_bulk', { payload: { planVersionId, allocations } });
+        const newAllocs = await invoke<PvAllocation[]>('list_all_allocations_for_plan_version', { planVersionId });
+        setAllPlanAllocations(newAllocs);
+      } catch (err) { console.error("Bulk PV paste failed:", err); fetchAllData(); }
     }
-  }, [activityRowIds, columnKeys, isReadOnly, fetchAllData, selectedCells, viewMode]);
+  }, [activityRowIds, columnKeys, isReadOnly, fetchAllData, selectedCells, viewMode, planVersionId]);
 
   const handleCopyTsv = async () => {
     const rows: string[][] = [];
@@ -1084,14 +1240,18 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     const handleCopy = (e: ClipboardEvent) => {
       if (selectedCells.size === 0 || !e.clipboardData || viewMode === 'weekly') return;
       const activeEl = document.activeElement;
-      if (!activeEl || !activeEl.id.startsWith('cell-ac-')) return;
+      if (!activeEl || !activeEl.id.startsWith('cell-')) return;
+      
+      const metricType = activeEl.id.startsWith('cell-pv-') ? 'pv' : 'ac';
+      if (!activeEl.id.startsWith(`cell-${metricType}-`)) return;
+
       e.preventDefault();
 
       const findRowIndex = (wbsId: number, uId: number) => activityRowIds.findIndex(r => r.wbsId === wbsId && r.userId === uId);
       let minRow = Infinity, maxRow = -1, minCol = Infinity, maxCol = -1;
       
       const cellCoords = Array.from(selectedCells).map(cellId => {
-        const parts = cellId.split('-');
+        const parts = cellId.split('-'); // cell-ac-wbs-user-date
         const wbsId = Number(parts[2]);
         const userId = Number(parts[3]);
         const date = parts.slice(4).join('-');
@@ -1109,8 +1269,13 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
       const grid: (number | string)[][] = Array(maxRow - minRow + 1).fill(0).map(() => Array(maxCol - minCol + 1).fill(''));
       
       cellCoords.forEach(({ r, c, wbsId, userId, date }) => {
-        if (selectedCells.has(`cell-ac-${wbsId}-${userId}-${date}`)) {
-          const value = executionData[wbsId]?.[userId]?.[date]?.ac?.value;
+        if (selectedCells.has(`cell-${metricType}-${wbsId}-${userId}-${date}`)) {
+          let value;
+          if (metricType === 'ac') {
+            value = executionData[wbsId]?.[userId]?.[date]?.ac?.value;
+          } else {
+            value = executionData[wbsId]?.[userId]?.[date]?.pv;
+          }
           grid[r - minRow][c - minCol] = value ?? '';
         }
       });
@@ -1202,7 +1367,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
                     key={node.id} node={node} level={0} columns={columns} 
                     data={executionData} progressData={progressData} allElements={elements} allPlanAllocations={allPlanAllocations} allPlanActuals={allPlanActuals} users={users}
                     assignedUsersMap={assignedUsers}
-                    onAcChange={handleAcChange} onProgressChange={handleProgressChange} isReadOnly={isReadOnly} 
+                    onPvChange={handlePvChange} onAcChange={handleAcChange} onProgressChange={handleProgressChange} isReadOnly={isReadOnly} 
                     onAddUser={handleAddUserToActivity}
                     onCellKeyDown={handleCellKeyDown} 
                     onCellPaste={handleCellPaste} 
