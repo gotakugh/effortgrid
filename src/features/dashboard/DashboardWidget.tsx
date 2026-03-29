@@ -15,6 +15,7 @@ import {
   SimpleGrid,
   MultiSelect,
   Collapse,
+  TextInput,
 } from '@mantine/core';
 import {
   ResponsiveContainer,
@@ -29,7 +30,7 @@ import {
   ComposedChart,
   Area,
 } from 'recharts';
-import { IconAlertCircle, IconTrash } from '@tabler/icons-react';
+import { IconAlertCircle, IconTrash, IconEdit } from '@tabler/icons-react';
 import { EvmKpis, SCurveDataPoint, WidgetConfig, WbsElementDetail, Granularity, User, PlanMilestone } from '../../types';
 import dayjs from 'dayjs';
 import classes from './Dashboard.module.css';
@@ -70,6 +71,22 @@ export function DashboardWidget({ config, planVersionId, onUpdate, onRemove }: W
   const [sCurveData, setSCurveData] = useState<SCurveDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [title, setTitle] = useState(config.title);
+
+  useEffect(() => {
+    setTitle(config.title);
+  }, [config.title]);
+
+  const handleTitleSave = () => {
+    setIsEditingTitle(false);
+    if (title.trim() && title !== config.title) {
+      onUpdate(config.id, { title });
+    } else {
+      setTitle(config.title);
+    }
+  };
 
   const [filtersOpened, { toggle: toggleFilters }] = useDisclosure(false);
 
@@ -136,9 +153,9 @@ export function DashboardWidget({ config, planVersionId, onUpdate, onRemove }: W
             <YAxis />
             <Tooltip />
             <Legend />
-            <Line type="monotone" dataKey="cumulativePv" name="PV" stroke="#8884d8" dot={false} />
-            <Line type="monotone" dataKey="cumulativeAc" name="AC" stroke="#ca4f4f" dot={false} />
-            <Line type="monotone" dataKey="cumulativeEv" name="EV" stroke="#82ca9d" dot={false} />
+            <Line type="monotone" dataKey="cumulativePv" name="PV" stroke="#8884d8" dot={{ r: 3, strokeWidth: 2 }} activeDot={{ r: 5 }} />
+            <Line type="monotone" dataKey="cumulativeAc" name="AC" stroke="#ca4f4f" dot={{ r: 3, strokeWidth: 2 }} activeDot={{ r: 5 }} />
+            <Line type="monotone" dataKey="cumulativeEv" name="EV" stroke="#82ca9d" dot={{ r: 3, strokeWidth: 2 }} activeDot={{ r: 5 }} />
         </LineChart>
       </ResponsiveContainer>
       <Text size="sm" fw={500} mt="md">ETC (Estimate to Complete)</Text>
@@ -151,7 +168,7 @@ export function DashboardWidget({ config, planVersionId, onUpdate, onRemove }: W
             <Legend />
             <Area type="monotone" dataKey="actualEtc" stackId="a" stroke="#4c6a85" fill="#4c6a85" name="ETC (Actual)" />
             <Area type="monotone" dataKey="cumulativeEv" stackId="a" stroke="#82ca9d" fill="#82ca9d" name="EV" />
-            <Line type="monotone" dataKey="plannedEtc" stroke="#ff7300" strokeWidth={2} name="ETC (Planned)" dot={false}/>
+            <Line type="monotone" dataKey="plannedEtc" stroke="#ff7300" strokeWidth={2} name="ETC (Planned)" dot={{ r: 3, strokeWidth: 2 }} activeDot={{ r: 5 }}/>
             <Brush dataKey="date" height={30} stroke="#8884d8" />
         </ComposedChart>
       </ResponsiveContainer>
@@ -162,7 +179,29 @@ export function DashboardWidget({ config, planVersionId, onUpdate, onRemove }: W
     <Paper withBorder p="md" radius="md">
         <Stack>
             <Group justify="space-between" className={classes.widget_header}>
-                <Title order={4}>{config.title}</Title>
+                {isEditingTitle ? (
+                  <TextInput
+                    value={title}
+                    onChange={(event) => setTitle(event.currentTarget.value)}
+                    onBlur={handleTitleSave}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') handleTitleSave();
+                      if (event.key === 'Escape') {
+                        setIsEditingTitle(false);
+                        setTitle(config.title);
+                      }
+                    }}
+                    autoFocus
+                    variant="unstyled"
+                    size="md"
+                    styles={{ input: { fontWeight: 700, fontSize: 'var(--mantine-font-size-lg)', padding: 0, height: 'auto', lineHeight: '1.3' } }}
+                  />
+                ) : (
+                  <Group gap="xs" align="center">
+                    <Title order={4} onClick={() => setIsEditingTitle(true)} style={{ cursor: 'pointer' }}>{config.title}</Title>
+                    <ActionIcon variant="subtle" color="gray" onClick={() => setIsEditingTitle(true)}><IconEdit size={16} /></ActionIcon>
+                  </Group>
+                )}
                 <Group>
                   <SegmentedControl
                       value={config.granularity}
