@@ -167,3 +167,44 @@
     height: calc(14px * var(--zoom-factor)) !important;
 }
 
+/* Native Input Fallback for Matrix Performance */
+.ac_input_native {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: calc(24px * var(--zoom-factor));
+    height: calc(24px * var(--zoom-factor));
+    line-height: calc(24px * var(--zoom-factor));
+    padding: 0 calc(4px * var(--zoom-factor));
+    font-size: inherit;
+    text-align: right;
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+    color: var(--mantine-color-text);
+    outline: none;
+    font-family: inherit;
+}
+.ac_input_native:hover:not([readonly]) {
+    border-color: var(--mantine-color-blue-outline);
+    background-color: rgba(255, 255, 255, 0.1);
+}
+.ac_input_native:focus {
+    border-color: var(--mantine-color-blue-filled);
+}
+.ac_input_native[readonly] {
+    background-color: transparent;
+    cursor: default;
+    color: var(--mantine-color-dimmed);
+}
+
+/* Hide number arrows (spinners) */
+.ac_input_native::-webkit-outer-spin-button,
+.ac_input_native::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.ac_input_native[type=number] {
+  -moz-appearance: textfield;
+}
+
