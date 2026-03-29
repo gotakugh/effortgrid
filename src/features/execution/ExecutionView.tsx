@@ -729,6 +729,32 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
         fetchAllData(); // revert on error
     }
   }, [isReadOnly, fetchAllData]);
+
+  const handleProgressChange = useCallback(async (wbsElementId: number, date: string, value: number | null) => {
+    if (isReadOnly) return;
+    
+    setProgressData(prev => {
+        const newData = JSON.parse(JSON.stringify(prev));
+        if (!newData[wbsElementId]) newData[wbsElementId] = {};
+        if (value !== null && value >= 0) {
+            newData[wbsElementId][date] = { id: prev[wbsElementId]?.[date]?.id || -1, value };
+        } else {
+            if (newData[wbsElementId]?.[date]) {
+                delete newData[wbsElementId][date];
+            }
+        }
+        return newData;
+    });
+
+    try {
+        await invoke('upsert_progress_update', {
+            payload: { wbsElementId, reportDate: date, progressPercent: value }
+        });
+    } catch (err) {
+        console.error("Failed to upsert progress:", err);
+        fetchAllData(); // revert on error
+    }
+  }, [isReadOnly, fetchAllData]);
   
   const focusCell = (wbsElementId: number, userId: number, date: string) => document.getElementById(`cell-ac-${wbsElementId}-${userId}-${date}`)?.focus();
 
