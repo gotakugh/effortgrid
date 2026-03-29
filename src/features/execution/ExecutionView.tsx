@@ -6,7 +6,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { useDisclosure } from '@mantine/hooks';
 import { MonthPickerInput } from '@mantine/dates';
-import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus, IconZoomOut, IconZoomIn, IconClipboardCopy } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus, IconZoomOut, IconZoomIn, IconClipboardCopy, IconTarget } from '@tabler/icons-react';
 import { WbsElementDetail, WbsElementType, PvAllocation, ActualCost, ExecutionData, User } from '../../types';
 import { useUsers } from '../../hooks/useUsers';
 import { ImportWizardModal } from '../../components/ImportWizardModal';
@@ -50,6 +50,38 @@ interface GridProps {
 const getBadgeColor = (type: WbsElementType) => ({ Project: 'blue', WorkPackage: 'cyan', Activity: 'teal' }[type] || 'gray');
 
 // --- Sub-components ---
+const ProgressInputCell = ({ wbsElementId, date, initialValue, onCommit, isReadOnly }: {
+  wbsElementId: number; date: string; initialValue?: number; isReadOnly: boolean;
+  onCommit: (value: number | null) => void;
+}) => {
+  const [value, setValue] = useState<string | number>(initialValue ?? '');
+  useEffect(() => { setValue(initialValue ?? ''); }, [initialValue]);
+
+  const handleBlur = () => {
+    const numericValue = value === '' ? null : Number(value);
+    const initialNumericValue = initialValue ?? null;
+    if (numericValue !== initialNumericValue) onCommit(numericValue);
+  };
+  
+  return (
+    <NumberInput
+      classNames={{ input: classes.ac_input }}
+      style={{ height: '100%' }}
+      styles={{
+        wrapper: { height: '100%' },
+        input: { height: '100%', cursor: 'cell', textAlign: 'right', paddingRight: 'var(--mantine-spacing-xs)' }
+      }}
+      value={value}
+      onChange={setValue}
+      onBlur={handleBlur}
+      step={1} min={0} max={100} hideControls
+      readOnly={isReadOnly}
+      variant="unstyled"
+      rightSection={<Text size="xs" c="dimmed">%</Text>}
+      rightSectionWidth={20}
+    />
+  );
+};
 const AcInputCell = ({ wbsElementId, userId, date, initialAc, onCommit, isReadOnly, onKeyDown, onPaste, onMouseDown, onMouseOver, isSelected }: {
   wbsElementId: number; userId: number; date: string; initialAc?: number; isReadOnly: boolean;
   onCommit: (value: number | null) => void;
@@ -176,13 +208,14 @@ const ResourceCapacityFooter = ({ users, elements, data, columns }: {
 };
 
 const GridRow = ({ 
-    node, level, columns, data, allElements, allPlanAllocations, allPlanActuals, users, assignedUsersMap,
-    onAcChange, isReadOnly, onAddUser,
+    node, level, columns, data, progressData, allElements, allPlanAllocations, allPlanActuals, users, assignedUsersMap,
+    onAcChange, onProgressChange, isReadOnly, onAddUser,
     onCellKeyDown, onCellPaste, onCellMouseDown, onCellMouseOver, selectedCells 
 }: {
-  node: TreeNode; level: number; columns: Column[]; data: ExecutionMap; allElements: WbsElementDetail[]; allPlanAllocations: PvAllocation[]; allPlanActuals: ActualCost[]; users: User[];
+  node: TreeNode; level: number; columns: Column[]; data: ExecutionMap; progressData: { [wbsId: number]: { [date: string]: { id: number; value: number } } }; allElements: WbsElementDetail[]; allPlanAllocations: PvAllocation[]; allPlanActuals: ActualCost[]; users: User[];
   assignedUsersMap: { [wbsId: number]: Set<number> };
   onAcChange: (wbsElementId: number, userId: number, date: string, value: number | null) => void;
+  onProgressChange: (wbsElementId: number, date: string, value: number | null) => void;
   isReadOnly: boolean;
   onAddUser: (wbsElementId: number, userId: number) => void;
   onCellKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string) => void;
@@ -194,6 +227,15 @@ const GridRow = ({
   const isActivity = node.elementType === 'Activity';
   const userMap = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
   const assignedUsers = useMemo(() => assignedUsersMap[node.wbsElementId] || new Set(), [assignedUsersMap, node.wbsElementId]);
+
+  const latestProgress = useMemo(() => {
+    const activityProgress = progressData[node.wbsElementId];
+    if (!activityProgress) return null;
+    const dates = Object.keys(activityProgress);
+    if (dates.length === 0) return null;
+    const latestDate = dates.reduce((a, b) => a > b ? a : b);
+    return activityProgress[latestDate]?.value;
+  }, [progressData, node.wbsElementId]);
 
   const hasUnassignedPv = useMemo(() => {
     const unassignedData = data[node.wbsElementId]?.[0];
@@ -326,6 +368,39 @@ const GridRow = ({
         })}
       </Table.Tr>
 
+      {isActivity && (
+        <Table.Tr>
+            <Table.Td className={classes.wbs_col} style={{ verticalAlign: 'middle' }}>
+                <Group gap="xs" style={{ paddingLeft: (level * 20) + 30 }}>
+                    <IconTarget size={16} />
+                    <Text size="xs">Progress (%)</Text>
+                </Group>
+            </Table.Td>
+            <Table.Td style={{ textAlign: 'right', verticalAlign: 'middle' }}>
+                <Text size="sm" fw={500}>
+                    {latestProgress !== null ? `${latestProgress}%` : ''}
+                </Text>
+            </Table.Td>
+            {columns.map(col => (
+                <Table.Td key={`${col.key}-progress`} className={classes.data_cell} style={{ padding: 0 }}>
+                    {col.type === 'day' ? (
+                        <ProgressInputCell
+                            wbsElementId={node.wbsElementId}
+                            date={col.key}
+                            initialValue={progressData[node.wbsElementId]?.[col.key]?.value}
+                            onCommit={(value) => onProgressChange(node.wbsElementId, col.key, value)}
+                            isReadOnly={isReadOnly}
+                        />
+                    ) : (
+                        <div style={{padding: '0 var(--mantine-spacing-xs)', minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'flex-end'}}>
+                            {/* Weekly progress input can be added later if needed */}
+                        </div>
+                    )}
+                </Table.Td>
+            ))}
+        </Table.Tr>
+      )}
+
       {/* User Rows */}
       {isActivity && usersToRender.map((userId, index) => {
         const user = userMap.get(userId);
@@ -437,7 +512,7 @@ const GridRow = ({
       })}
 
       {/* Child WBS Element Rows */}
-      {node.children.map((child) => <GridRow key={child.id} node={child} level={level + 1} columns={columns} data={data} allElements={allElements} allPlanAllocations={allPlanAllocations} allPlanActuals={allPlanActuals} users={users} assignedUsersMap={assignedUsersMap} onAcChange={onAcChange} onAddUser={onAddUser} isReadOnly={isReadOnly} onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste} onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver} selectedCells={selectedCells} />)}
+      {node.children.map((child) => <GridRow key={child.id} node={child} level={level + 1} columns={columns} data={data} progressData={progressData} allElements={allElements} allPlanAllocations={allPlanAllocations} allPlanActuals={allPlanActuals} users={users} assignedUsersMap={assignedUsersMap} onAcChange={onAcChange} onProgressChange={onProgressChange} onAddUser={onAddUser} isReadOnly={isReadOnly} onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste} onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver} selectedCells={selectedCells} />)}
     </>
   );
 };
@@ -451,6 +526,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [elements, setElements] = useState<WbsElementDetail[]>([]);
   const [executionData, setExecutionData] = useState<ExecutionMap>({});
+  const [progressData, setProgressData] = useState<{ [wbsId: number]: { [date: string]: { id: number; value: number } } }>({});
   const [allPlanAllocations, setAllPlanAllocations] = useState<PvAllocation[]>([]);
   const [allPlanActuals, setAllPlanActuals] = useState<ActualCost[]>([]);
   const [assignedUsers, setAssignedUsers] = useState<{ [wbsId: number]: Set<number> }>({});
@@ -549,6 +625,12 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
           execMap[ac.wbsElementId][ac.userId][ac.workDate].ac = { id: ac.id, value: ac.actualCost };
           addAssignedUser(ac.wbsElementId, ac.userId);
       }
+      const progMap: any = {};
+      data.progressUpdates.forEach(p => {
+        if(!progMap[p.wbsElementId]) progMap[p.wbsElementId] = {};
+        progMap[p.wbsElementId][p.reportDate] = { id: p.id, value: p.progressPercent };
+      });
+      setProgressData(progMap);
 
       setExecutionData(execMap);
       setAssignedUsers(prev => {
@@ -1053,9 +1135,9 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
               {tree.map(node => 
                 <GridRow 
                     key={node.id} node={node} level={0} columns={columns} 
-                    data={executionData} allElements={elements} allPlanAllocations={allPlanAllocations} allPlanActuals={allPlanActuals} users={users}
+                    data={executionData} progressData={progressData} allElements={elements} allPlanAllocations={allPlanAllocations} allPlanActuals={allPlanActuals} users={users}
                     assignedUsersMap={assignedUsers}
-                    onAcChange={handleAcChange} isReadOnly={isReadOnly} 
+                    onAcChange={handleAcChange} onProgressChange={handleProgressChange} isReadOnly={isReadOnly} 
                     onAddUser={handleAddUserToActivity}
                     onCellKeyDown={handleCellKeyDown} 
                     onCellPaste={handleCellPaste} 

@@ -51,6 +51,7 @@ export interface ActualCost {
 export interface ExecutionData {
   pvAllocations: PvAllocation[];
   actualCosts: ActualCost[];
+  progressUpdates: ProgressUpdate[];
 }
 
 export interface ProgressUpdate {
