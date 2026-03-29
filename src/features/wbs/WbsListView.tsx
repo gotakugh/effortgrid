@@ -153,6 +153,8 @@ function WbsElementRow({
             onChange={(val) => val && handleDetailChange('elementType', val as WbsElementType)}
             variant="unstyled"
             readOnly={isReadOnly}
+            searchable
+            allowDeselect={false}
             classNames={{ input: classes.editable_input }}
           />
         </Table.Td>
