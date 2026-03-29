@@ -288,13 +288,14 @@ const GridRow = ({
     return { nodeTotalAllocated: totalAllocated, nodeTotalActuals: totalActuals };
   }, [node, allPlanAllocations, allPlanActuals]);
 
-  const getRollupProgress = (dateStr: string): number | null => {
+  const getRollupProgress = (dateStr?: string): number | null => {
     const getIds = (n: TreeNode): number[] => [n.wbsElementId, ...n.children.flatMap(getIds)];
     const descendantIds = getIds(node);
     const activityDescendants = allElements.filter(el => descendantIds.includes(el.wbsElementId) && el.elementType === 'Activity');
     
     let totalBac = 0;
     let totalEv = 0;
+    let hasAnyProgress = false;
     
     activityDescendants.forEach(activity => {
       const bac = activity.estimatedPv || 0;
@@ -302,17 +303,22 @@ const GridRow = ({
       if (bac > 0) {
         const activityProgress = progressData[activity.wbsElementId];
         if (activityProgress) {
-          const dates = Object.keys(activityProgress).filter(d => d <= dateStr).sort();
+          let dates = Object.keys(activityProgress);
+          if (dateStr) {
+              dates = dates.filter(d => d <= dateStr);
+          }
+          dates.sort();
           if (dates.length > 0) {
             const latestDate = dates[dates.length - 1];
             const percent = activityProgress[latestDate].value;
             totalEv += bac * (percent / 100.0);
+            hasAnyProgress = true;
           }
         }
       }
     });
     
-    return totalBac > 0 ? (totalEv / totalBac) * 100 : null;
+    return (totalBac > 0 && hasAnyProgress) ? (totalEv / totalBac) * 100 : null;
   };
 
   const userTotalAllocated = (userId: number) => {
@@ -394,7 +400,12 @@ const GridRow = ({
       <Table.Tr>
         <Table.Td className={classes.metric_col} style={{ borderTop: 'none', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>Prog.</Table.Td>
         <Table.Td className={classes.total_col} style={{ borderTop: 'none', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>
-            <Text size="sm" fw={500}>{latestProgress !== null ? `${latestProgress}%` : (isActivity ? '' : (getRollupProgress(dayjs().format('YYYY-MM-DD'))?.toFixed(1) ? `${getRollupProgress(dayjs().format('YYYY-MM-DD'))?.toFixed(1)}%` : ''))}</Text>
+            <Text size="sm" fw={500}>
+                {isActivity 
+                    ? (latestProgress !== null ? `${latestProgress}%` : '') 
+                    : (getRollupProgress() !== null ? `${getRollupProgress()?.toFixed(1)}%` : '')
+                }
+            </Text>
         </Table.Td>
         {columns.map((col, idx) => {
             const dateStr = col.type === 'day' ? col.key : col.dates[col.dates.length - 1].format('YYYY-MM-DD');
