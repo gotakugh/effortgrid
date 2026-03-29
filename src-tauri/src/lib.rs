@@ -66,6 +66,8 @@ pub fn run() {
             commands::upsert_actual_costs_bulk,
             commands::get_actual_costs_for_element,
             commands::add_progress_update,
+            commands::upsert_progress_update,
+            commands::upsert_progress_updates_bulk,
             commands::get_progress_updates_for_element,
             commands::get_evm_kpis,
             commands::get_s_curve_data,

@@ -152,6 +152,14 @@ pub struct ActualCostBulkItem {
     pub actual_cost: Option<f64>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProgressUpdateBulkItem {
+    pub wbs_element_id: i64,
+    pub report_date: NaiveDate,
+    pub progress_percent: Option<f64>,
+}
+
 
 // ----- DB Access Functions -----
 
@@ -934,6 +942,37 @@ pub async fn get_progress_updates_for_element(
     .fetch_all(pool)
     .await?;
     Ok(records)
+}
+
+pub async fn list_all_progress_updates_for_plan_version(pool: &SqlitePool, plan_version_id: i64) -> DbResult< Vec< ProgressUpdate > > {
+    let activity_ids: Vec< (i64,) > = sqlx::query_as("SELECT wbs_element_id FROM wbs_element_details WHERE plan_version_id = ? AND element_type = 'Activity' AND is_deleted = false").bind(plan_version_id).fetch_all(pool).await?;
+    if activity_ids.is_empty() { return Ok(vec![]); }
+    let activity_ids: Vec< i64 > = activity_ids.into_iter().map(|(id,)| id).collect();
+    let params = activity_ids.iter().map(|_| "?").collect::< Vec< _ > >().join(", ");
+    let sql = format!("SELECT * FROM progress_updates WHERE wbs_element_id IN ({}) AND is_deleted = false ORDER BY report_date ASC", params);
+    let mut query = sqlx::query_as::< _, ProgressUpdate >(&sql);
+    for id in &activity_ids { query = query.bind(id); }
+    Ok(query.fetch_all(pool).await?)
+}
+
+pub async fn upsert_progress_update(pool: &SqlitePool, wbs_element_id: i64, reported_by_user_id: i64, report_date: NaiveDate, progress_percent: Option< f64 >) -> DbResult< () > {
+    let mut tx = pool.begin().await?;
+    let existing_id: Option< i64 > = sqlx::query_scalar("SELECT id FROM progress_updates WHERE wbs_element_id = ? AND report_date = ? AND is_deleted = false").bind(wbs_element_id).bind(report_date).fetch_optional(&mut *tx).await?;
+    match (progress_percent, existing_id) {
+        (Some(p), Some(id)) => { sqlx::query("UPDATE progress_updates SET progress_percent = ? WHERE id = ?").bind(p).bind(id).execute(&mut *tx).await?; }
+        (Some(p), None) => { sqlx::query("INSERT INTO progress_updates (wbs_element_id, reported_by_user_id, report_date, progress_percent) VALUES (?, ?, ?, ?)").bind(wbs_element_id).bind(reported_by_user_id).bind(report_date).bind(p).execute(&mut *tx).await?; }
+        (None, Some(id)) => { sqlx::query("UPDATE progress_updates SET is_deleted = true WHERE id = ?").bind(id).execute(&mut *tx).await?; }
+        (None, None) => {}
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn upsert_progress_updates_bulk(pool: &SqlitePool, reported_by_user_id: i64, items: &[ProgressUpdateBulkItem]) -> DbResult< () > {
+    for item in items {
+        upsert_progress_update(pool, item.wbs_element_id, reported_by_user_id, item.report_date, item.progress_percent).await?;
+    }
+    Ok(())
 }
 
 // ----- User Management -----

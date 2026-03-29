@@ -182,6 +182,7 @@ pub struct GetExecutionDataPayload {
 pub struct ExecutionDataResult {
     pv_allocations: Vec<PvAllocation>,
     actual_costs: Vec<ActualCost>,
+    pub progress_updates: Vec<ProgressUpdate>,
 }
 
 use std::collections::HashMap;
@@ -688,6 +689,30 @@ pub async fn add_progress_update(
     Ok(record)
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertProgressUpdatePayload { pub wbs_element_id: i64, pub report_date: NaiveDate, pub progress_percent: Option< f64 > }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertProgressUpdatesBulkPayload { pub items: Vec< crate::db::ProgressUpdateBulkItem > }
+
+#[tauri::command]
+pub async fn upsert_progress_update(state: State<'_, crate::db::AppState>, payload: UpsertProgressUpdatePayload) -> AppResult< () > {
+    let pool_guard = state.pool.read().await;
+    let pool = pool_guard.as_ref().ok_or_else(|| AppError::DbError("No database is currently open".to_string()))?;
+    db::upsert_progress_update(pool, payload.wbs_element_id, 1, payload.report_date, payload.progress_percent).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn upsert_progress_updates_bulk(state: State<'_, crate::db::AppState>, payload: UpsertProgressUpdatesBulkPayload) -> AppResult< () > {
+    let pool_guard = state.pool.read().await;
+    let pool = pool_guard.as_ref().ok_or_else(|| AppError::DbError("No database is currently open".to_string()))?;
+    db::upsert_progress_updates_bulk(pool, 1, &payload.items).await?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn get_progress_updates_for_element(
     state: State<'_, crate::db::AppState>,
@@ -740,9 +765,12 @@ pub async fn get_execution_data(
         db::list_actuals_for_period(pool, payload.plan_version_id, payload.start_date, payload.end_date)
             .await?;
 
+    let progress_updates = db::list_all_progress_updates_for_plan_version(pool, payload.plan_version_id).await?;
+
     Ok(ExecutionDataResult {
         pv_allocations,
         actual_costs,
+        progress_updates,
     })
 }
 
