@@ -288,6 +288,33 @@ const GridRow = ({
     return { nodeTotalAllocated: totalAllocated, nodeTotalActuals: totalActuals };
   }, [node, allPlanAllocations, allPlanActuals]);
 
+  const getRollupProgress = (dateStr: string): number | null => {
+    const getIds = (n: TreeNode): number[] => [n.wbsElementId, ...n.children.flatMap(getIds)];
+    const descendantIds = getIds(node);
+    const activityDescendants = allElements.filter(el => descendantIds.includes(el.wbsElementId) && el.elementType === 'Activity');
+    
+    let totalBac = 0;
+    let totalEv = 0;
+    
+    activityDescendants.forEach(activity => {
+      const bac = activity.estimatedPv || 0;
+      totalBac += bac;
+      if (bac > 0) {
+        const activityProgress = progressData[activity.wbsElementId];
+        if (activityProgress) {
+          const dates = Object.keys(activityProgress).filter(d => d <= dateStr).sort();
+          if (dates.length > 0) {
+            const latestDate = dates[dates.length - 1];
+            const percent = activityProgress[latestDate].value;
+            totalEv += bac * (percent / 100.0);
+          }
+        }
+      }
+    });
+    
+    return totalBac > 0 ? (totalEv / totalBac) * 100 : null;
+  };
+
   const userTotalAllocated = (userId: number) => {
       return allPlanAllocations
           .filter(alloc => alloc.wbsElementId === node.wbsElementId && alloc.userId === userId)
@@ -315,10 +342,10 @@ const GridRow = ({
 
   return (
     <>
-      {/* PV Row (Plan) */}
+      {/* --- 1st Row: PV --- */}
       <Table.Tr>
-        <Table.Td rowSpan={2} className={classes.wbs_col} style={{ verticalAlign: 'middle', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>
-          <Group gap="xs" style={{ paddingLeft: level * 20 }}>
+        <Table.Td rowSpan={3} className={classes.wbs_col} style={{ verticalAlign: 'top', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>
+          <Group gap="xs" style={{ paddingLeft: level * 20, paddingTop: 6 }}>
             {isActivity && (
               <Menu shadow="md" width={200}>
                 <Menu.Target><Tooltip label="Add person"><ActionIcon variant="subtle" size="sm"><IconPlus size={14} /></ActionIcon></Tooltip></Menu.Target>
@@ -337,69 +364,67 @@ const GridRow = ({
             <Text size="sm" truncate>{node.title}</Text>
           </Group>
         </Table.Td>
-        <Table.Td style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
+        <Table.Td className={`${classes.metric_col} ${classes.readonly_cell}`} style={{ borderBottom: 'none' }}>PV</Table.Td>
+        <Table.Td className={`${classes.total_col} ${classes.readonly_cell}`} style={{ borderBottom: 'none' }}>
           <Text size="sm" c="dimmed">{nodeTotalAllocated > 0 ? nodeTotalAllocated.toFixed(1) : ''}</Text>
         </Table.Td>
-        {columns.map((col) => {
-          return (
-            <Table.Td key={`${col.key}-pv`} className={classes.data_cell} style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
-              <Text size="sm" c="dimmed">{getRollupValue(col, 'pv') > 0 ? getRollupValue(col, 'pv').toFixed(1) : ''}</Text>
-            </Table.Td>
-          );
-        })}
+        {columns.map((col) => (
+          <Table.Td key={`${col.key}-pv`} className={`${classes.data_cell} ${classes.readonly_cell}`} style={{ textAlign: 'right', borderBottom: 'none' }}>
+            <Text size="sm" c="dimmed">{getRollupValue(col, 'pv') > 0 ? getRollupValue(col, 'pv').toFixed(1) : ''}</Text>
+          </Table.Td>
+        ))}
       </Table.Tr>
-      {/* AC Row (Actual) */}
+
+      {/* --- 2nd Row: AC --- */}
       <Table.Tr>
-        <Table.Td style={{ textAlign: 'right', verticalAlign: 'middle', borderTop: 'none' }}>
-          <Text
-            size="sm"
-            fw={500}
-            style={{ color: nodeTotalActuals > nodeTotalAllocated ? 'var(--mantine-color-red-7)' : undefined }}
-          >
+        <Table.Td className={`${classes.metric_col} ${classes.readonly_cell}`} style={{ borderTop: 'none', borderBottom: 'none' }}>AC</Table.Td>
+        <Table.Td className={`${classes.total_col} ${classes.readonly_cell}`} style={{ borderTop: 'none', borderBottom: 'none' }}>
+          <Text size="sm" fw={500} style={{ color: nodeTotalActuals > nodeTotalAllocated ? 'var(--mantine-color-red-7)' : undefined }}>
             {nodeTotalActuals > 0 ? nodeTotalActuals.toFixed(1) : ''}
           </Text>
         </Table.Td>
-        {columns.map((col) => {
-          return (
-            <Table.Td key={`${col.key}-ac`} className={classes.data_cell} style={{ padding: 'var(--table-td-padding)', borderTop: 'none', textAlign: 'right', verticalAlign: 'middle' }}>
-              <Text size="sm" fw={500}>{getRollupValue(col, 'ac') > 0 ? getRollupValue(col, 'ac').toFixed(1) : ''}</Text>
-            </Table.Td>
-          );
-        })}
+        {columns.map((col) => (
+          <Table.Td key={`${col.key}-ac`} className={`${classes.data_cell} ${classes.readonly_cell}`} style={{ borderTop: 'none', borderBottom: 'none', textAlign: 'right' }}>
+            <Text size="sm" fw={500}>{getRollupValue(col, 'ac') > 0 ? getRollupValue(col, 'ac').toFixed(1) : ''}</Text>
+          </Table.Td>
+        ))}
       </Table.Tr>
 
-      {isActivity && (
-        <Table.Tr>
-            <Table.Td className={classes.wbs_col} style={{ verticalAlign: 'middle' }}>
-                <Group gap="xs" style={{ paddingLeft: (level * 20) + 30 }}>
-                    <IconTarget size={16} />
-                    <Text size="xs">Progress (%)</Text>
-                </Group>
-            </Table.Td>
-            <Table.Td style={{ textAlign: 'right', verticalAlign: 'middle' }}>
-                <Text size="sm" fw={500}>
-                    {latestProgress !== null ? `${latestProgress}%` : ''}
-                </Text>
-            </Table.Td>
-            {columns.map(col => (
-                <Table.Td key={`${col.key}-progress`} className={classes.data_cell} style={{ padding: 0 }}>
-                    {col.type === 'day' ? (
-                        <ProgressInputCell
-                            wbsElementId={node.wbsElementId}
-                            date={col.key}
-                            initialValue={progressData[node.wbsElementId]?.[col.key]?.value}
-                            onCommit={(value) => onProgressChange(node.wbsElementId, col.key, value)}
-                            isReadOnly={isReadOnly}
-                        />
-                    ) : (
-                        <div style={{padding: '0 var(--mantine-spacing-xs)', minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'flex-end'}}>
-                            {/* Weekly progress input can be added later if needed */}
-                        </div>
-                    )}
+      {/* --- 3rd Row: Progress --- */}
+      <Table.Tr>
+        <Table.Td className={classes.metric_col} style={{ borderTop: 'none', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>Prog.</Table.Td>
+        <Table.Td className={classes.total_col} style={{ borderTop: 'none', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>
+            <Text size="sm" fw={500}>{latestProgress !== null ? `${latestProgress}%` : (isActivity ? '' : (getRollupProgress(dayjs().format('YYYY-MM-DD'))?.toFixed(1) ? `${getRollupProgress(dayjs().format('YYYY-MM-DD'))?.toFixed(1)}%` : ''))}</Text>
+        </Table.Td>
+        {columns.map((col, idx) => {
+            const dateStr = col.type === 'day' ? col.key : col.dates[col.dates.length - 1].format('YYYY-MM-DD');
+            let displayProg: React.ReactNode = '';
+            
+            if (isActivity) {
+                displayProg = col.type === 'day' ? (
+                    <ProgressInputCell
+                        wbsElementId={node.wbsElementId} date={dateStr}
+                        initialValue={progressData[node.wbsElementId]?.[dateStr]?.value}
+                        onCommit={(value) => onProgressChange(node.wbsElementId, dateStr, value)}
+                        isReadOnly={isReadOnly}
+                    />
+                ) : null;
+            } else if (col.type === 'day') {
+                const currentProg = getRollupProgress(dateStr);
+                const prevDateStr = idx > 0 && columns[idx-1].type === 'day' ? (columns[idx-1] as DayColumn).key : dayjs(dateStr).subtract(1, 'day').format('YYYY-MM-DD');
+                const prevProg = getRollupProgress(prevDateStr);
+                if (currentProg !== null && currentProg !== prevProg) {
+                    displayProg = <Text size="sm" fw={500} c="teal">{currentProg.toFixed(1)}%</Text>;
+                }
+            }
+
+            return (
+                <Table.Td key={`${col.key}-progress`} className={isActivity ? classes.data_cell : `${classes.data_cell} ${classes.readonly_cell}`} style={{ borderTop: 'none', padding: 0, textAlign: 'right', verticalAlign: 'middle', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>
+                    {displayProg}
                 </Table.Td>
-            ))}
-        </Table.Tr>
-      )}
+            );
+        })}
+      </Table.Tr>
 
       {/* User Rows */}
       {isActivity && usersToRender.map((userId, index) => {
@@ -439,7 +464,8 @@ const GridRow = ({
                   <Text size="xs">{isUnassigned ? 'Unassigned' : user?.name}</Text>
                 </Group>
               </Table.Td>
-              <Table.Td style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
+              <Table.Td className={`${classes.metric_col} ${classes.readonly_cell}`} style={{ borderBottom: 'none' }}>PV</Table.Td>
+              <Table.Td className={classes.total_col} style={{ textAlign: 'right', verticalAlign: 'middle', borderBottom: 'none' }}>
                 <Text size="sm" c="dimmed">{totalAllocatedForUser > 0 ? totalAllocatedForUser.toFixed(1) : ''}</Text>
               </Table.Td>
               {columns.map((col, dayIndex) => {
@@ -461,7 +487,8 @@ const GridRow = ({
             </Table.Tr>
             {/* User AC Row */}
             <Table.Tr>
-              <Table.Td style={{ textAlign: 'right', verticalAlign: 'middle', borderTop: 'none', borderBottom: isLastUser ? '1px solid var(--mantine-color-dark-4)' : 'none' }}>
+              <Table.Td className={`${classes.metric_col} ${classes.readonly_cell}`} style={{ borderTop: 'none', borderBottom: isLastUser ? '1px solid var(--mantine-color-dark-4)' : 'none' }}>AC</Table.Td>
+              <Table.Td className={classes.total_col} style={{ textAlign: 'right', verticalAlign: 'middle', borderTop: 'none', borderBottom: isLastUser ? '1px solid var(--mantine-color-dark-4)' : 'none' }}>
                 <Text
                   size="sm"
                   fw={500}
@@ -486,7 +513,7 @@ const GridRow = ({
                     : col.dates.reduce((sum, d) => sum + (data[node.wbsElementId]?.[userId]?.[d.format('YYYY-MM-DD')]?.ac?.value || 0), 0);
 
                 return (
-                  <Table.Td key={`${dateStr}-ac`} className={`${classes.data_cell} ${ganttClassesAc.join(' ')}`} style={{ padding: 0, borderTop: 'none', textAlign: 'right', verticalAlign: 'middle', borderBottom: isLastUser ? '1px solid var(--mantine-color-gray-3)' : 'none' }}>
+                  <Table.Td key={`${dateStr}-ac`} className={`${classes.data_cell} ${ganttClassesAc.join(' ')}`} style={{ padding: 0, borderTop: 'none', textAlign: 'right', verticalAlign: 'middle', borderBottom: isLastUser ? '1px solid var(--mantine-color-dark-4)' : 'none' }}>
                     {col.type === 'day' ? (
                       <AcInputCell
                         wbsElementId={node.wbsElementId} userId={userId} date={dateStr}
@@ -1138,6 +1165,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
             <Table.Thead>
               <Table.Tr>
                 <Table.Th className={classes.wbs_col}>WBS Element</Table.Th>
+                <Table.Th className={classes.metric_col}>Metric</Table.Th>
                 <Table.Th className={classes.total_col}>Total</Table.Th>
                 {columns.map((col) => {
                   if (col.type === 'day') {
