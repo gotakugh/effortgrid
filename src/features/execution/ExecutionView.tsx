@@ -50,9 +50,9 @@ interface GridProps {
 const getBadgeColor = (type: WbsElementType) => ({ Project: 'blue', WorkPackage: 'cyan', Activity: 'teal' }[type] || 'gray');
 
 // --- Sub-components ---
-const ProgressInputCell = ({ wbsElementId, date, initialValue, onCommit, isReadOnly }: {
+const ProgressInputCell = React.memo(({ wbsElementId, date, initialValue, onCommit, isReadOnly }: {
   wbsElementId: number; date: string; initialValue?: number; isReadOnly: boolean;
-  onCommit: (value: number | null) => void;
+  onCommit: (wbsId: number, d: string, val: number | null) => void;
 }) => {
   const [value, setValue] = useState<string | number>(initialValue ?? '');
   useEffect(() => { setValue(initialValue ?? ''); }, [initialValue]);
@@ -60,7 +60,7 @@ const ProgressInputCell = ({ wbsElementId, date, initialValue, onCommit, isReadO
   const handleBlur = () => {
     const numericValue = value === '' ? null : Number(value);
     const initialNumericValue = initialValue ?? null;
-    if (numericValue !== initialNumericValue) onCommit(numericValue);
+    if (numericValue !== initialNumericValue) onCommit(wbsElementId, date, numericValue);
   };
   
   return (
@@ -81,10 +81,10 @@ const ProgressInputCell = ({ wbsElementId, date, initialValue, onCommit, isReadO
       rightSectionWidth={20}
     />
   );
-};
-const PvInputCell = ({ wbsElementId, userId, date, initialPv, onCommit, isReadOnly, onKeyDown, onPaste, onMouseDown, onMouseOver, isSelected }: {
+});
+const PvInputCell = React.memo(({ wbsElementId, userId, date, initialPv, onCommit, isReadOnly, onKeyDown, onPaste, onMouseDown, onMouseOver, isSelected }: {
   wbsElementId: number; userId: number; date: string; initialPv?: number; isReadOnly: boolean;
-  onCommit: (value: number | null) => void;
+  onCommit: (wbsId: number, uId: number, d: string, val: number | null) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
   onPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
   onMouseDown: (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
@@ -97,7 +97,7 @@ const PvInputCell = ({ wbsElementId, userId, date, initialPv, onCommit, isReadOn
   const handleBlur = () => {
     const numericValue = value === '' ? null : Number(value);
     const initialNumericValue = initialPv ?? null;
-    if (numericValue !== initialNumericValue) onCommit(numericValue);
+    if (numericValue !== initialNumericValue) onCommit(wbsElementId, userId, date, numericValue);
   };
 
   return (
@@ -124,11 +124,11 @@ const PvInputCell = ({ wbsElementId, userId, date, initialPv, onCommit, isReadOn
       variant="unstyled"
     />
   );
-};
+});
 
-const AcInputCell = ({ wbsElementId, userId, date, initialAc, onCommit, isReadOnly, onKeyDown, onPaste, onMouseDown, onMouseOver, isSelected }: {
+const AcInputCell = React.memo(({ wbsElementId, userId, date, initialAc, onCommit, isReadOnly, onKeyDown, onPaste, onMouseDown, onMouseOver, isSelected }: {
   wbsElementId: number; userId: number; date: string; initialAc?: number; isReadOnly: boolean;
-  onCommit: (value: number | null) => void;
+  onCommit: (wbsId: number, uId: number, d: string, val: number | null) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
   onPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
   onMouseDown: (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
@@ -141,7 +141,7 @@ const AcInputCell = ({ wbsElementId, userId, date, initialAc, onCommit, isReadOn
   const handleBlur = () => {
     const numericValue = value === '' ? null : Number(value);
     const initialNumericValue = initialAc ?? null;
-    if (numericValue !== initialNumericValue) onCommit(numericValue);
+    if (numericValue !== initialNumericValue) onCommit(wbsElementId, userId, date, numericValue);
   };
 
   return (
@@ -168,7 +168,7 @@ const AcInputCell = ({ wbsElementId, userId, date, initialAc, onCommit, isReadOn
       variant="unstyled"
     />
   );
-};
+});
 
 const ResourceCapacityFooter = ({ users, elements, data, columns }: {
     users: User[];
@@ -461,7 +461,7 @@ const GridRow = ({
                     <ProgressInputCell
                         wbsElementId={node.wbsElementId} date={dateStr}
                         initialValue={progressData[node.wbsElementId]?.[dateStr]?.value}
-                        onCommit={(value) => onProgressChange(node.wbsElementId, dateStr, value)}
+                        onCommit={onProgressChange}
                         isReadOnly={isReadOnly}
                     />
                 ) : null;
@@ -543,7 +543,7 @@ const GridRow = ({
                       <PvInputCell
                         wbsElementId={node.wbsElementId} userId={userId} date={dateStr}
                         initialPv={value}
-                        onCommit={(value) => onPvChange(node.wbsElementId, userId, dateStr, value)}
+                        onCommit={onPvChange}
                         isReadOnly={isReadOnly}
                         onKeyDown={onCellKeyDown} onPaste={onCellPaste}
                         onMouseDown={onCellMouseDown}
@@ -592,7 +592,7 @@ const GridRow = ({
                       <AcInputCell
                         wbsElementId={node.wbsElementId} userId={userId} date={dateStr}
                         initialAc={value}
-                        onCommit={(value) => onAcChange(node.wbsElementId, userId, dateStr, value)}
+                        onCommit={onAcChange}
                         isReadOnly={isReadOnly || isUnassigned}
                         onKeyDown={onCellKeyDown} onPaste={onCellPaste}
                         onMouseDown={onCellMouseDown}
