@@ -259,7 +259,31 @@ const ResourceCapacityFooter = ({ users, elements, data, columns }: {
     );
 };
 
-const GridRow = ({ 
+const gridRowAreEqual = (prevProps: any, nextProps: any) => {
+  if (prevProps.data !== nextProps.data) return false;
+  if (prevProps.progressData !== nextProps.progressData) return false;
+  if (prevProps.columns !== nextProps.columns) return false;
+  if (prevProps.assignedUsersMap !== nextProps.assignedUsersMap) return false;
+  if (prevProps.allPlanAllocations !== nextProps.allPlanAllocations) return false;
+  if (prevProps.allPlanActuals !== nextProps.allPlanActuals) return false;
+  if (prevProps.isReadOnly !== nextProps.isReadOnly) return false;
+
+  if (prevProps.selectedCells !== nextProps.selectedCells) {
+    const wbsId = prevProps.node.wbsElementId;
+    const checkHas = (cells: Set<string>) => {
+      for (const cell of cells) {
+        if (cell.includes(`-${wbsId}-`)) return true;
+      }
+      return false;
+    };
+    if (checkHas(prevProps.selectedCells) || checkHas(nextProps.selectedCells)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const GridRow = React.memo(({ 
     node, level, columns, data, progressData, allElements, allPlanAllocations, allPlanActuals, users, assignedUsersMap,
     onPvChange, onAcChange, onProgressChange, isReadOnly, onAddUser,
     onCellKeyDown, onCellPaste, onCellMouseDown, onCellMouseOver, selectedCells 
@@ -620,11 +644,9 @@ const GridRow = ({
         )
       })}
 
-      {/* Child WBS Element Rows */}
-      {node.children.map((child) => <GridRow key={child.id} node={child} level={level + 1} columns={columns} data={data} progressData={progressData} allElements={allElements} allPlanAllocations={allPlanAllocations} allPlanActuals={allPlanActuals} users={users} assignedUsersMap={assignedUsersMap} onPvChange={onPvChange} onAcChange={onAcChange} onProgressChange={onProgressChange} onAddUser={onAddUser} isReadOnly={isReadOnly} onCellKeyDown={onCellKeyDown} onCellPaste={onCellPaste} onCellMouseDown={onCellMouseDown} onCellMouseOver={onCellMouseOver} selectedCells={selectedCells} />)}
     </>
   );
-};
+}, gridRowAreEqual);
 
 // --- Main Component ---
 export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
@@ -779,6 +801,18 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     });
     return roots;
   }, [elements]);
+
+  const flattenedTree = useMemo(() => {
+    const flat: { node: TreeNode, level: number }[] = [];
+    const traverse = (nodes: TreeNode[], level: number) => {
+      for (const node of nodes) {
+        flat.push({ node, level });
+        if (node.children) traverse(node.children, level + 1);
+      }
+    };
+    traverse(tree, 0);
+    return flat;
+  }, [tree]);
 
   const { activityRowIds, columnKeys } = useMemo(() => {
     const rowIdTuples: { wbsId: number, userId: number }[] = [];
@@ -1370,9 +1404,9 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {tree.map(node => 
+              {flattenedTree.map(({ node, level }) => 
                 <GridRow 
-                    key={node.id} node={node} level={0} columns={columns} 
+                    key={node.id} node={node} level={level} columns={columns} 
                     data={executionData} progressData={progressData} allElements={elements} allPlanAllocations={allPlanAllocations} allPlanActuals={allPlanActuals} users={users}
                     assignedUsersMap={assignedUsers}
                     onPvChange={handlePvChange} onAcChange={handleAcChange} onProgressChange={handleProgressChange} isReadOnly={isReadOnly} 
