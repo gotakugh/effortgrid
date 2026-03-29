@@ -274,7 +274,7 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
 
   const [bulkType, setBulkType] = useState<WbsElementType | null>(null);
   const [bulkMilestoneId, setBulkMilestoneId] = useState<string | null>(null);
-  const [bulkPv, setBulkPv] = useState<number | ''>('');
+  const [bulkPv, setBulkPv] = useState<string | number>('');
 
   const handleToggleSelect = useCallback((id: number) => {
     setSelectedIds(prev => {
