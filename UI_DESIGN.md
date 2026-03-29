@@ -56,10 +56,12 @@
 
 ### 3.3 ✍️ Execution (実行: 実績・進捗の入力)
 **目的:** 日々の稼働時間（AC）と、現在の進捗率（EV）を入力する。
-- **UI構成:** 2つのタブ（またはスプリットビュー）で分離。
-  1. **Time Tracking (AC):** 日付カレンダーと、その日に作業したActivityごとの入力フォーム（`actual_costs`）。
-  2. **Progress Update (EV):** Activity一覧と、現在の進捗率（0-100%のSliderまたはNumberInput）、メモ欄（`progress_updates`）。
-- **制約:** 過去のベースライン（`is_draft = false`）を選択している時は、この画面は全体が ReadOnly になる。
+- **UI構成:** Allocation画面と同様のマトリックス（表計算風）UIに統合。
+  - 各Activity行の直下に「Progress (%)」の専用行を設け、最新の進捗率をTotal列に表示しつつ、日々のセルで進捗を更新（`progress_updates`）できる。
+  - その下に担当者ごとの「実績コスト（AC）」の入力行（`actual_costs`）を配置し、作業時間と進捗を1画面で俯瞰・入力可能にする。
+- **制約 (Guardrails):**
+  - 過去のベースライン（`is_draft = false`）を選択している時は、全体が ReadOnly になる。
+  - **インポート時の安全装置:** Excelの空欄コピーによる意図しない進捗リセットを防ぐため、インポート時の進捗 `0%` 入力はエラーとして弾き、手動操作でのみ0%へのリセットを許可する。
 
 ### 3.4 📊 EVM Dashboard (分析: EVMチャート)
 **目的:** プロジェクトの健全性を可視化する。

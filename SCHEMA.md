@@ -44,6 +44,8 @@ erDiagram
         INTEGER id PK
         TEXT name
         TEXT role
+        TEXT email "Nullable"
+        REAL daily_capacity "1日の稼働上限目安 (デフォルト 8.0)"
     }
     wbs_elements {
         INTEGER id PK "Global ID (不変の要素実体)"
