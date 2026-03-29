@@ -26,10 +26,22 @@
     min-width: calc(350px * var(--zoom-factor));
 }
 
+/* Metricカラムの幅 */
+.metric_col {
+    width: calc(4rem * var(--zoom-factor));
+    min-width: calc(4rem * var(--zoom-factor));
+    text-align: center;
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-dimmed);
+    background-color: var(--mantine-color-dark-8);
+}
+
 /* Totalカラムの幅 */
 .total_col {
-    width: calc(6rem * var(--zoom-factor));
-    min-width: calc(6rem * var(--zoom-factor));
+    width: calc(5rem * var(--zoom-factor));
+    min-width: calc(5rem * var(--zoom-factor));
+    text-align: right;
+    background-color: var(--mantine-color-dark-8);
 }
 
 
@@ -52,7 +64,27 @@
     padding: 0 calc(4px * var(--zoom-factor)) !important;
     font-size: inherit;
     text-align: right;
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    transition: border-color 0.2s ease;
   }
+  input:hover:not([readonly]) {
+    border-color: var(--mantine-color-blue-outline);
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+  input:focus {
+    border-color: var(--mantine-color-blue-filled);
+  }
+  input[readonly] {
+    background-color: transparent;
+    cursor: default;
+  }
+}
+
+.readonly_cell {
+    background-color: var(--mantine-color-dark-8);
+    color: var(--mantine-color-dimmed);
 }
 
 .rollup_cell {
