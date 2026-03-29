@@ -513,7 +513,7 @@ const GridRow = ({
                     : col.dates.reduce((sum, d) => sum + (data[node.wbsElementId]?.[userId]?.[d.format('YYYY-MM-DD')]?.ac?.value || 0), 0);
 
                 return (
-                  <Table.Td key={`${dateStr}-ac`} className={`${classes.data_cell} ${ganttClassesAc.join(' ')}`} style={{ padding: 0, borderTop: 'none', textAlign: 'right', verticalAlign: 'middle', borderBottom: isLastUser ? '1px solid var(--mantine-color-dark-4)' : 'none' }}>
+                  <Table.Td key={`${dateStr}-ac`} className={`${classes.data_cell} ${ganttClassesAc.join(' ')}`} style={{ padding: 0, borderTop: 'none', textAlign: 'right', verticalAlign: 'middle' }}>
                     {col.type === 'day' ? (
                       <AcInputCell
                         wbsElementId={node.wbsElementId} userId={userId} date={dateStr}
