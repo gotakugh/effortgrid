@@ -41,6 +41,7 @@ const MAPPING_TYPES = [
   { value: 'elementType', label: 'Type' },
   { value: 'dailyPv', label: 'Daily PV' },
   { value: 'dailyAc', label: 'Daily AC' },
+  { value: 'dailyProgress', label: 'Daily Progress (%)' },
 ];
 
 const DATE_FORMATS = [
@@ -131,7 +132,7 @@ export function ImportWizardModal({
             const header = headers[index].trim();
             const d = dayjs(header, DATE_FORMATS, true);
             // Only change columns that are date-like and were previously mapped as PV/AC
-            if (d.isValid() && (map.type === 'dailyPv' || map.type === 'dailyAc')) {
+            if (d.isValid() && (map.type === 'dailyPv' || map.type === 'dailyAc' || map.type === 'dailyProgress')) {
                 return { ...map, type: dateTarget };
             }
             return map;
@@ -192,9 +193,10 @@ export function ImportWizardModal({
         
         const dailyPvs: Record<string, number> = {};
         const dailyAcs: Record<string, number> = {};
+        const dailyProgresses: Record<string, number> = {};
 
         columnMaps.forEach((map, colIndex) => {
-            if (map.type !== 'dailyPv' && map.type !== 'dailyAc') return;
+            if (map.type !== 'dailyPv' && map.type !== 'dailyAc' && map.type !== 'dailyProgress') return;
             
             const valStr = row[colIndex]?.trim();
             if (valStr) {
@@ -203,10 +205,11 @@ export function ImportWizardModal({
 
                 if (map.type === 'dailyPv' && map.date) dailyPvs[map.date] = val;
                 if (map.type === 'dailyAc' && map.date) dailyAcs[map.date] = val;
+                if (map.type === 'dailyProgress' && map.date) dailyProgresses[map.date] = val;
             }
         });
 
-        return { wbsId, hierarchy, estimatedPv, assignee, milestone, description, tags, elementType, dailyPvs, dailyAcs };
+        return { wbsId, hierarchy, estimatedPv, assignee, milestone, description, tags, elementType, dailyPvs, dailyAcs, dailyProgresses };
       });
       setPreviewRows(newPreviewRows);
     } catch (e: any) {
@@ -287,6 +290,7 @@ export function ImportWizardModal({
                   data={[
                       { label: 'Planned Value (PV)', value: 'dailyPv' },
                       { label: 'Actual Cost (AC)', value: 'dailyAc' },
+                      { label: 'Progress (%)', value: 'dailyProgress' },
                   ]}
                 />
               </Group>
@@ -350,8 +354,9 @@ export function ImportWizardModal({
                             <Table.Td>{row.assignee}</Table.Td>
                             <Table.Td>{row.milestone}</Table.Td>
                             <Table.Td>
-                                {Object.keys(row.dailyPvs).length > 0 && `PV: ${Object.keys(row.dailyPvs).length}`}
-                                {Object.keys(row.dailyAcs).length > 0 && ` AC: ${Object.keys(row.dailyAcs).length}`}
+                                {Object.keys(row.dailyPvs).length > 0 && `PV: ${Object.keys(row.dailyPvs).length} `}
+                                {Object.keys(row.dailyAcs).length > 0 && `AC: ${Object.keys(row.dailyAcs).length} `}
+                                {Object.keys(row.dailyProgresses).length > 0 && `Prog: ${Object.keys(row.dailyProgresses).length}`}
                             </Table.Td>
                         </Table.Tr>
                     ))}

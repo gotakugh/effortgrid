@@ -125,6 +125,7 @@ export interface MappedImportRow {
   elementType: WbsElementType | null;
   dailyPvs: Record<string, number>;
   dailyAcs: Record<string, number>;
+  dailyProgresses: Record<string, number>;
 }
 
 export interface DisplaySettings {
