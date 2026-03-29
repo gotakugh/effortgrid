@@ -644,8 +644,8 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const selectedCellsRef = useRef<Set<string>>(new Set());
-  const [isSelecting, setIsSelecting] = useState(false);
-  const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
+  const isSelectingRef = useRef(false);
+  const selectionAnchorRef = useRef<string | null>(null);
 
   const updateSelection = useEvent((newSelection: Set<string>) => {
       const current = selectedCellsRef.current;
@@ -780,7 +780,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
   }, [planVersionId, daysInMonth]);
 
   useEffect(() => {
-    const handleMouseUp = () => setIsSelecting(false);
+    const handleMouseUp = () => { isSelectingRef.current = false; };
     window.addEventListener('mouseup', handleMouseUp);
     return () => window.removeEventListener('mouseup', handleMouseUp);
   }, []);
@@ -944,12 +944,12 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
   const handleCellMouseDown = useEvent((e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => {
     e.preventDefault();
     e.currentTarget.focus();
-    setIsSelecting(true);
+    isSelectingRef.current = true;
     const cellId = `cell-${metricType}-${wbsElementId}-${userId}-${date}`;
     const findRowIndex = (wbsId: number, uId: number) => activityRowIds.findIndex(r => r.wbsId === wbsId && r.userId === uId);
 
-    if (e.shiftKey && selectionAnchor) {
-        const startIdParts = selectionAnchor.split('-');
+    if (e.shiftKey && selectionAnchorRef.current) {
+        const startIdParts = selectionAnchorRef.current.split('-');
         const startWbsId = Number(startIdParts[2]);
         const startUserId = Number(startIdParts[3]);
         const startDate = startIdParts.slice(4).join('-');
@@ -973,25 +973,25 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
         for (let r = minRow; r <= maxRow; r++) {
             for (let c = minCol; c <= maxCol; c++) {
                 const rowInfo = activityRowIds[r];
-                const type = selectionAnchor?.split('-')[1] ?? metricType;
+                const type = selectionAnchorRef.current?.split('-')[1] ?? metricType;
                 newSelectedCells.add(`cell-${type}-${rowInfo.wbsId}-${rowInfo.userId}-${columnKeys[c]}`);
             }
         }
         updateSelection(newSelectedCells);
     } else {
-        setSelectionAnchor(cellId);
+        selectionAnchorRef.current = cellId;
         updateSelection(new Set([cellId]));
     }
   });
 
   const handleCellMouseOver = useEvent((wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => {
-    if (!isSelecting || !selectionAnchor) return;
+    if (!isSelectingRef.current || !selectionAnchorRef.current) return;
     
-    const anchorType = selectionAnchor.split('-')[1];
+    const anchorType = selectionAnchorRef.current.split('-')[1];
     if (anchorType !== metricType) return;
     
     const findRowIndex = (wbsId: number, uId: number) => activityRowIds.findIndex(r => r.wbsId === wbsId && r.userId === uId);
-    const startIdParts = selectionAnchor.split('-');
+    const startIdParts = selectionAnchorRef.current.split('-');
     const startWbsId = Number(startIdParts[2]);
     const startUserId = Number(startIdParts[3]);
     const startDate = startIdParts.slice(4).join('-');
