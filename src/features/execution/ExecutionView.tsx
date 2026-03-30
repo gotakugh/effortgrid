@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
-  Group, Title, Text, Table, NumberInput, Badge, Box, Loader, Center, Alert, Stack, ActionIcon, Menu, Avatar, Tooltip, rem, SegmentedControl, Button,
+  Group, Title, Text, Table, NumberInput, Badge, Box, Loader, Center, Alert, Stack, ActionIcon, Menu, Avatar, Tooltip, rem, SegmentedControl, Button, ScrollArea,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useDisclosure } from '@mantine/hooks';
@@ -175,7 +175,7 @@ const ResourceCapacityFooter = React.memo(({ users, elements, data, columns }: {
     const userMap = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
 
     const dailyTotals = useMemo(() => {
-        const totals: { [userId: number]: { [date: string]: number } } = {};
+        const totals: { [userId: number]: { [date: string]: { pv: number, ac: number } } } = {};
         const activityIds = new Set(elements.filter(e => e.elementType === 'Activity').map(e => e.wbsElementId));
 
         for (const wbsIdStr in data) {
@@ -185,14 +185,15 @@ const ResourceCapacityFooter = React.memo(({ users, elements, data, columns }: {
             const userEntries = data[wbsId];
             for (const userIdStr in userEntries) {
                 const userId = Number(userIdStr);
-                if (userId === 0) continue; // Skip unassigned for capacity check
+                if (userId === 0) continue; 
 
                 if (!totals[userId]) totals[userId] = {};
                 
                 const dateEntries = userEntries[userId];
                 for (const date in dateEntries) {
-                    if (!totals[userId][date]) totals[userId][date] = 0;
-                    totals[userId][date] += dateEntries[date].ac?.value || 0;
+                    if (!totals[userId][date]) totals[userId][date] = { pv: 0, ac: 0 };
+                    totals[userId][date].pv += dateEntries[date].pv || 0;
+                    totals[userId][date].ac += dateEntries[date].ac?.value || 0;
                 }
             }
         }
@@ -206,41 +207,65 @@ const ResourceCapacityFooter = React.memo(({ users, elements, data, columns }: {
     return (
         <Table.Tfoot>
             <Table.Tr>
-                <Table.Th>Resource Capacity (Actuals)</Table.Th>
-                <Table.Th></Table.Th>
+                <Table.Th className={classes.wbs_col}>Resource Capacity</Table.Th>
+                <Table.Th className={classes.metric_col}></Table.Th>
+                <Table.Th className={classes.total_col}></Table.Th>
                 <Table.Th colSpan={columns.length}></Table.Th>
             </Table.Tr>
             {activeUserIds.map(userId => {
                 const user = userMap.get(userId);
                 if (!user) return null;
 
+                const totalPv = Object.values(dailyTotals[userId] || {}).reduce((sum, d) => sum + d.pv, 0);
+                const totalAc = Object.values(dailyTotals[userId] || {}).reduce((sum, d) => sum + d.ac, 0);
+
                 return (
-                    <Table.Tr key={userId}>
-                        <Table.Td>
-                            <Group gap="xs">
-                                <Avatar size="sm">{user.name.substring(0, 2)}</Avatar>
-                                <Text size="xs">{user.name}</Text>
-                            </Group>
-                        </Table.Td>
-                        <Table.Td></Table.Td>
+                    <React.Fragment key={userId}>
+                        <Table.Tr>
+                            <Table.Td rowSpan={2} style={{ verticalAlign: 'middle', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>
+                                <Group gap="xs">
+                                    <Avatar size="sm">{user.name.substring(0, 2)}</Avatar>
+                                    <Text size="xs">{user.name}</Text>
+                                </Group>
+                            </Table.Td>
+                            <Table.Td className={`${classes.metric_col} ${classes.readonly_cell}`} style={{ borderBottom: 'none' }}>PV</Table.Td>
+                            <Table.Td className={`${classes.total_col} ${classes.readonly_cell}`} style={{ borderBottom: 'none' }}>
+                                <Text size="sm" c="blue.3">{totalPv > 0 ? totalPv.toFixed(1) : ''}</Text>
+                            </Table.Td>
+                            {columns.map(col => {
+                                const total = col.type === 'day'
+                                    ? dailyTotals[userId]?.[col.key]?.pv || 0
+                                    : col.dates.reduce((sum, day) => sum + (dailyTotals[userId]?.[day.format('YYYY-MM-DD')]?.pv || 0), 0);
+                                return (
+                                    <Table.Td key={`${col.key}-pv`} className={`${classes.data_cell} ${classes.readonly_cell}`} style={{ textAlign: 'right', borderBottom: 'none' }}>
+                                        <Text size="sm" c="blue.3">{total > 0 ? total.toFixed(1) : ''}</Text>
+                                    </Table.Td>
+                                );
+                            })}
+                        </Table.Tr>
+                        <Table.Tr>
+                            <Table.Td className={classes.metric_col} style={{ borderTop: 'none', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>AC</Table.Td>
+                            <Table.Td className={classes.total_col} style={{ borderTop: 'none', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>
+                                <Text size="sm" fw="500">{totalAc > 0 ? totalAc.toFixed(1) : ''}</Text>
+                            </Table.Td>
+                            {columns.map(col => {
+                                const totalAcForPeriod = col.type === 'day'
+                                    ? dailyTotals[userId]?.[col.key]?.ac || 0
+                                    : col.dates.reduce((sum, day) => sum + (dailyTotals[userId]?.[day.format('YYYY-MM-DD')]?.ac || 0), 0);
+                                
+                                const capacity = user.dailyCapacity ?? 8.0;
+                                const isOverloaded = col.type === 'day' 
+                                    ? totalAcForPeriod > capacity
+                                    : col.dates.some(d => (dailyTotals[userId]?.[d.format('YYYY-MM-DD')]?.ac || 0) > capacity);
 
-                        {columns.map(col => {
-                            const total = col.type === 'day'
-                                ? dailyTotals[userId]?.[col.key] || 0
-                                : col.dates.reduce((sum, day) => sum + (dailyTotals[userId]?.[day.format('YYYY-MM-DD')] || 0), 0);
-                            
-                            const capacity = user.dailyCapacity ?? 8.0;
-                            const isOverloaded = col.type === 'day' 
-                                ? total > capacity
-                                : col.dates.some(d => (dailyTotals[userId]?.[d.format('YYYY-MM-DD')] || 0) > capacity);
-
-                            return (
-                                <Table.Td key={col.key} style={{textAlign: 'right', color: isOverloaded ? 'var(--mantine-color-red-7)' : undefined }}>
-                                    {total > 0 ? total.toFixed(1) : ''}
-                                </Table.Td>
-                            );
-                        })}
-                    </Table.Tr>
+                                return (
+                                    <Table.Td key={`${col.key}-ac`} style={{textAlign: 'right', color: isOverloaded ? 'var(--mantine-color-red-7)' : undefined, borderTop: 'none', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>
+                                        {totalAcForPeriod > 0 ? totalAcForPeriod.toFixed(1) : ''}
+                                    </Table.Td>
+                                );
+                            })}
+                        </Table.Tr>
+                    </React.Fragment>
                 );
             })}
         </Table.Tfoot>
@@ -1351,7 +1376,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
   if (!planVersionId) return <Text c="dimmed" ta="center" pt="xl">Please select a project to start tracking execution.</Text>;
 
   return (
-    <Stack h="100%">
+    <Stack h="calc(100vh - 90px)">
       <ImportWizardModal
         opened={importWizardOpened}
         onClose={closeImportWizard}
@@ -1393,7 +1418,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
       {error && <Alert title="Error" color="red" icon={<IconAlertCircle />}>{error}</Alert>}
 
       {!isLoading && !error && (
-        <Box className={classes.table_container} style={{ '--zoom': zoomLevel } as React.CSSProperties}>
+        <ScrollArea className={classes.table_container} style={{ '--zoom': zoomLevel } as React.CSSProperties} offsetScrollbars>
           <Table className={classes.table} withColumnBorders verticalSpacing="0" horizontalSpacing="0">
             <Table.Thead>
               <Table.Tr>
@@ -1435,7 +1460,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
             </Table.Tbody>
             <ResourceCapacityFooter users={users} elements={elements} data={executionData} columns={columns} />
           </Table>
-        </Box>
+        </ScrollArea>
       )}
     </Stack>
   );

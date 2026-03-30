@@ -4,7 +4,7 @@
     flex: 1;
     overflow: auto;
     position: relative;
-    max-height: calc(100vh - 160px); /* これを追加して縦スクロールを有効化 */
+    min-height: 0;
 }
 
 .table {

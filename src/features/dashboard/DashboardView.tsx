@@ -8,7 +8,8 @@ import {
   Title,
   Stack,
   Button,
-  Group
+  Group,
+  ScrollArea
 } from '@mantine/core';
 import { IconPlus } from '@tabler/icons-react';
 import { WidgetConfig, AppSettings } from '../../types';
@@ -111,7 +112,8 @@ export function DashboardView({ planVersionId, dbPath }: DashboardViewProps) {
   }
 
   return (
-    <Stack>
+    <ScrollArea h="calc(100vh - 90px)" offsetScrollbars>
+      <Stack pr="md" pb="md">
         <Group justify="space-between">
             <Title order={2}>EVM Dashboard</Title>
             <Button onClick={addWidget} leftSection={<IconPlus size={16}/>}>Add Panel</Button>
@@ -128,6 +130,7 @@ export function DashboardView({ planVersionId, dbPath }: DashboardViewProps) {
                 />
             ))}
         </SimpleGrid>
-    </Stack>
+      </Stack>
+    </ScrollArea>
   );
 }
