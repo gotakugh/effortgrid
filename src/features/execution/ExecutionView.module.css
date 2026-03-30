@@ -34,7 +34,8 @@
 .table tfoot th,
 .table tfoot td {
     background-color: var(--mantine-color-dark-7);
-    background-clip: padding-box;
+    background-clip: border-box;
+    border-color: var(--mantine-color-dark-4) !important;
 }
 
 .table thead .wbs_col,
@@ -45,6 +46,8 @@
 .table tfoot .total_col {
     z-index: 30;
     background-color: var(--mantine-color-dark-7);
+    background-clip: border-box;
+    border-color: var(--mantine-color-dark-4) !important;
 }
 
 /* セルのパディングを極限まで削り、ズームに連動させる */
@@ -62,7 +65,8 @@
     left: 0;
     z-index: 10;
     background-color: var(--mantine-color-body);
-    background-clip: padding-box;
+    background-clip: border-box;
+    border-color: var(--mantine-color-dark-4) !important;
     overflow: hidden;
 }
 
@@ -78,7 +82,8 @@
     position: sticky;
     left: calc(350px * var(--zoom-factor));
     z-index: 10;
-    background-clip: padding-box;
+    background-clip: border-box;
+    border-color: var(--mantine-color-dark-4) !important;
 }
 
 /* Totalカラムの幅 */
@@ -91,7 +96,8 @@
     position: sticky;
     left: calc((350px + 4rem) * var(--zoom-factor));
     z-index: 10;
-    background-clip: padding-box;
+    background-clip: border-box;
+    border-color: var(--mantine-color-dark-4) !important;
 }
 
 
