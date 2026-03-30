@@ -33,6 +33,12 @@
     bottom: 0;
 }
 
+/* 行全体に背景を敷くことで、セル間の水平サブピクセル隙間（透け）をボーダーを消さずにブロック */
+.table thead tr,
+.table tfoot tr {
+    background-color: var(--mantine-color-dark-7);
+}
+
 .table thead th,
 .table tfoot th,
 .table tfoot td {
@@ -59,9 +65,10 @@
 .table tfoot .metric_col,
 .table tfoot .total_col {
     z-index: 30;
-    background-color: var(--mantine-color-dark-7);
-    /* 交差部分は最前面＋縦横固定 */
+    background-color: var(--mantine-color-dark-7) !important;
+    /* 交差部分は最前面＋縦横固定。垂直隙間(box-shadow)も上書きして色を合わせる */
     position: sticky !important;
+    box-shadow: 1px 0 0 var(--mantine-color-dark-7) !important;
 }
 
 /* セルのパディングを極限まで削り、ズームに連動させる */
