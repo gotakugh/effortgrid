@@ -278,3 +278,23 @@
   -moz-appearance: textfield;
 }
 
+/* Progress Input Specific Overrides - 特異性を上げて強制上書き */
+.table input.progress_input {
+    padding-right: calc(9px * var(--zoom-factor)) !important;
+    padding-left: 0 !important;
+    /* 小数点や100など文字数が多くなっても収まるように文字サイズと間隔を微調整 */
+    font-size: calc(11px * var(--zoom-factor)) !important;
+    letter-spacing: -0.5px !important;
+}
+
+.table span.progress_symbol {
+    position: absolute;
+    right: calc(1px * var(--zoom-factor));
+    top: 50%;
+    transform: translateY(-50%);
+    /* %記号を極小化 */
+    font-size: calc(6px * var(--zoom-factor)) !important;
+    color: var(--mantine-color-teal-4);
+    pointer-events: none;
+}
+
