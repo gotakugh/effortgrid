@@ -28,7 +28,7 @@ import { useForm, zodResolver } from '@mantine/form';
 import { useDebouncedCallback, useDisclosure } from '@mantine/hooks';
 import { z } from 'zod';
 import { WbsElementDetail, WbsElementType, PlanMilestone } from '../../types';
-import { IconPlus, IconSitemap, IconCalendarStats, IconClipboardCopy } from '@tabler/icons-react';
+import { IconPlus, IconSitemap, IconCalendarStats, IconClipboardCopy, IconChevronRight, IconChevronDown, IconChevronsDown, IconChevronsRight } from '@tabler/icons-react';
 import { AllocationModal } from './AllocationModal';
 import { ImportWizardModal } from '../../components/ImportWizardModal';
 
@@ -57,6 +57,9 @@ function WbsElementRow({
   isReadOnly,
   isSelected,
   onToggleSelect,
+  isCollapsed,
+  onToggleCollapse,
+  collapsedNodes,
 }: {
   element: TreeNode;
   level: number;
@@ -66,6 +69,9 @@ function WbsElementRow({
   isReadOnly: boolean;
   isSelected: boolean;
   onToggleSelect: (id: number) => void;
+  isCollapsed: boolean;
+  onToggleCollapse: (id: number) => void;
+  collapsedNodes: Set<number>;
 }) {
   const [title, setTitle] = useState(element.title);
   const [description, setDescription] = useState(element.description || '');
@@ -148,13 +154,22 @@ function WbsElementRow({
           />
         </Table.Td>
         <Table.Td>
-          <div style={{ paddingLeft: level * 24 }}>
+          <div style={{ paddingLeft: level * 24, display: 'flex', alignItems: 'center' }}>
+            {element.children.length > 0 ? (
+              <ActionIcon variant="subtle" size="sm" onClick={() => onToggleCollapse(element.wbsElementId)} mr="xs">
+                {isCollapsed ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}
+              </ActionIcon>
+            ) : (
+              <Box w={26} mr="xs" />
+            )}
             <TextInput
               value={title}
               onChange={(e) => handleDetailChange('title', e.currentTarget.value)}
               variant="unstyled"
               readOnly={isReadOnly}
+              size="sm"
               classNames={{ input: classes.editable_input }}
+              style={{ flex: 1 }}
             />
           </div>
         </Table.Td>
@@ -167,6 +182,7 @@ function WbsElementRow({
             readOnly={isReadOnly}
             searchable
             allowDeselect={false}
+            size="sm"
             classNames={{ input: classes.editable_input }}
           />
         </Table.Td>
@@ -182,6 +198,7 @@ function WbsElementRow({
             readOnly={isReadOnly}
             searchable
             clearable
+            size="sm"
             classNames={{ input: classes.editable_input }}
           />
         </Table.Td>
@@ -196,6 +213,7 @@ function WbsElementRow({
               style={{ width: 100 }}
               readOnly={isReadOnly}
               variant="unstyled"
+              size="sm"
               classNames={{ input: classes.editable_input }}
             />
           ) : (
@@ -209,6 +227,7 @@ function WbsElementRow({
             variant="unstyled"
             placeholder="Add note..."
             readOnly={isReadOnly}
+            size="sm"
             classNames={{ input: classes.editable_input }}
           />
         </Table.Td>
@@ -220,6 +239,7 @@ function WbsElementRow({
             placeholder="Add tags..."
             clearable
             readOnly={isReadOnly}
+            size="sm"
             classNames={{ input: classes.editable_input }}
           />
         </Table.Td>
@@ -245,7 +265,7 @@ function WbsElementRow({
           </Tooltip>
         </Table.Td>
       </Table.Tr>
-      {element.children.map((child) => (
+      {!isCollapsed && element.children.map((child) => (
         <WbsElementRow
           key={child.id}
           element={child}
@@ -256,6 +276,9 @@ function WbsElementRow({
           isReadOnly={isReadOnly}
           isSelected={isSelected}
           onToggleSelect={onToggleSelect}
+          isCollapsed={collapsedNodes.has(child.wbsElementId)}
+          onToggleCollapse={onToggleCollapse}
+          collapsedNodes={collapsedNodes}
         />
       ))}
     </>
@@ -275,6 +298,31 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
   const [bulkType, setBulkType] = useState<WbsElementType | null>(null);
   const [bulkMilestoneId, setBulkMilestoneId] = useState<string | null>(null);
   const [bulkPv, setBulkPv] = useState<string | number>('');
+  
+  const [collapsedNodes, setCollapsedNodes] = useState(new Set<number>());
+
+  const handleToggleCollapse = useCallback((nodeId: number) => {
+    setCollapsedNodes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId);
+      } else {
+        newSet.add(nodeId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const handleExpandAll = useCallback(() => {
+    setCollapsedNodes(new Set());
+  }, []);
+
+  const handleCollapseAll = useCallback(() => {
+    const parentIds = elements
+      .filter(e => e.elementType === 'Project' || e.elementType === 'WorkPackage')
+      .map(e => e.wbsElementId);
+    setCollapsedNodes(new Set(parentIds));
+  }, [elements]);
 
   const handleToggleSelect = useCallback((id: number) => {
     setSelectedIds(prev => {
@@ -645,7 +693,7 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
       )}
 
       <ScrollArea h="calc(100vh - 150px)" offsetScrollbars>
-        <Table stickyHeader>
+        <Table stickyHeader verticalSpacing="xs">
           <Table.Thead>
           <Table.Tr>
             <Table.Th style={{ width: 40 }}>
@@ -656,7 +704,23 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
                 disabled={isReadOnly}
               />
             </Table.Th>
-            <Table.Th>WBS Title</Table.Th>
+            <Table.Th>
+              <Group justify="space-between" wrap="nowrap">
+                <Text size="sm" fw={700}>WBS Title</Text>
+                <Group gap={4}>
+                  <Tooltip label="Expand All">
+                    <ActionIcon variant="subtle" size="sm" color="gray" onClick={handleExpandAll}>
+                      <IconChevronsDown size={14} />
+                    </ActionIcon>
+                  </Tooltip>
+                  <Tooltip label="Collapse All">
+                    <ActionIcon variant="subtle" size="sm" color="gray" onClick={handleCollapseAll}>
+                      <IconChevronsRight size={14} />
+                    </ActionIcon>
+                  </Tooltip>
+                </Group>
+              </Group>
+            </Table.Th>
             <Table.Th>Type</Table.Th>
             <Table.Th>Milestone</Table.Th>
             <Table.Th>Estimated PV</Table.Th>
@@ -677,6 +741,9 @@ export function WbsListView({ planVersionId, isReadOnly }: WbsListViewProps) {
               isReadOnly={isReadOnly}
               isSelected={selectedIds.has(node.id)}
               onToggleSelect={handleToggleSelect}
+              isCollapsed={collapsedNodes.has(node.wbsElementId)}
+              onToggleCollapse={handleToggleCollapse}
+              collapsedNodes={collapsedNodes}
             />
           ))}
         </Table.Tbody>
