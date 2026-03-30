@@ -34,8 +34,21 @@
 .table tfoot th,
 .table tfoot td {
     background-color: var(--mantine-color-dark-7);
-    background-clip: border-box;
-    border-color: var(--mantine-color-dark-4) !important;
+    position: relative; /* 疑似要素の基準位置 */
+}
+
+/* 透け防止のための裏壁（疑似要素） */
+.table thead th::after,
+.table tfoot th::after,
+.table tfoot td::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--mantine-color-dark-7);
+    z-index: -1;
 }
 
 .table thead .wbs_col,
@@ -46,8 +59,6 @@
 .table tfoot .total_col {
     z-index: 30;
     background-color: var(--mantine-color-dark-7);
-    background-clip: border-box;
-    border-color: var(--mantine-color-dark-4) !important;
 }
 
 /* セルのパディングを極限まで削り、ズームに連動させる */
@@ -65,9 +76,18 @@
     left: 0;
     z-index: 10;
     background-color: var(--mantine-color-body);
-    background-clip: border-box;
-    border-color: var(--mantine-color-dark-4) !important;
     overflow: hidden;
+}
+/* 透け防止のための裏壁 */
+.wbs_col::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--mantine-color-body);
+    z-index: -1;
 }
 
 /* Metricカラムの幅 */
@@ -82,8 +102,16 @@
     position: sticky;
     left: calc(350px * var(--zoom-factor));
     z-index: 10;
-    background-clip: border-box;
-    border-color: var(--mantine-color-dark-4) !important;
+}
+.metric_col::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--mantine-color-dark-8);
+    z-index: -1;
 }
 
 /* Totalカラムの幅 */
@@ -96,8 +124,16 @@
     position: sticky;
     left: calc((350px + 4rem) * var(--zoom-factor));
     z-index: 10;
-    background-clip: border-box;
-    border-color: var(--mantine-color-dark-4) !important;
+}
+.total_col::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--mantine-color-dark-8);
+    z-index: -1;
 }
 
 
