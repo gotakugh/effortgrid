@@ -6,7 +6,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { useDisclosure } from '@mantine/hooks';
 import { MonthPickerInput } from '@mantine/dates';
-import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus, IconZoomOut, IconZoomIn, IconClipboardCopy, IconTarget } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus, IconZoomOut, IconZoomIn, IconClipboardCopy, IconTarget, IconChevronDown } from '@tabler/icons-react';
 import { WbsElementDetail, WbsElementType, PvAllocation, ActualCost, ExecutionData, User } from '../../types';
 import { useUsers } from '../../hooks/useUsers';
 import { ImportWizardModal } from '../../components/ImportWizardModal';
@@ -280,6 +280,8 @@ const gridRowAreEqual = (prevProps: any, nextProps: any) => {
   if (prevProps.allPlanAllocations !== nextProps.allPlanAllocations) return false;
   if (prevProps.allPlanActuals !== nextProps.allPlanActuals) return false;
   if (prevProps.isReadOnly !== nextProps.isReadOnly) return false;
+  if (prevProps.isCollapsed !== nextProps.isCollapsed) return false;
+  if (prevProps.onToggleCollapse !== nextProps.onToggleCollapse) return false;
 
   return true;
 };
@@ -287,7 +289,8 @@ const gridRowAreEqual = (prevProps: any, nextProps: any) => {
 const GridRow = React.memo(({ 
     node, level, columns, data, progressData, allElements, allPlanAllocations, allPlanActuals, users, assignedUsersMap,
     onPvChange, onAcChange, onProgressChange, isReadOnly, onAddUser,
-    onCellKeyDown, onCellPaste, onCellMouseDown, onCellMouseOver 
+    onCellKeyDown, onCellPaste, onCellMouseDown, onCellMouseOver,
+    isCollapsed, onToggleCollapse
 }: {
   node: TreeNode; level: number; columns: Column[]; data: ExecutionMap; progressData: { [wbsId: number]: { [date: string]: { id: number; value: number } } }; allElements: WbsElementDetail[]; allPlanAllocations: PvAllocation[]; allPlanActuals: ActualCost[]; users: User[];
   assignedUsersMap: { [wbsId: number]: Set<number> };
@@ -300,6 +303,8 @@ const GridRow = React.memo(({
   onCellPaste: (e: React.ClipboardEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
   onCellMouseDown: (e: React.MouseEvent<HTMLInputElement>, wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
   onCellMouseOver: (wbsElementId: number, userId: number, date: string, metricType: 'pv' | 'ac') => void;
+  isCollapsed: boolean;
+  onToggleCollapse: (nodeId: number) => void;
 }) => {
   const isActivity = node.elementType === 'Activity';
   const userMap = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
@@ -429,7 +434,14 @@ const GridRow = React.memo(({
       {/* --- 1st Row: PV --- */}
       <Table.Tr>
         <Table.Td rowSpan={3} className={classes.wbs_col} style={{ verticalAlign: 'top', borderBottom: '1px solid var(--mantine-color-dark-4)' }}>
-          <Group gap="xs" style={{ paddingLeft: level * 20, paddingTop: 6 }}>
+          <Group gap="xs" style={{ paddingLeft: level * 20, paddingTop: 6 }} wrap="nowrap" align="center">
+            {node.children.length > 0 ? (
+                <ActionIcon variant="subtle" size="sm" onClick={() => onToggleCollapse(node.wbsElementId)}>
+                    {isCollapsed ? <IconChevronRight size={14} /> : <IconChevronDown size={14} />}
+                </ActionIcon>
+            ) : (
+                <Box w={26} />
+            )}
             {isActivity && (
               <Menu shadow="md" width={200}>
                 <Menu.Target><Tooltip label="Add person"><ActionIcon variant="subtle" size="sm"><IconPlus size={14} /></ActionIcon></Tooltip></Menu.Target>
@@ -680,6 +692,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
   const [assignedUsers, setAssignedUsers] = useState<{ [wbsId: number]: Set<number> }>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [collapsedNodes, setCollapsedNodes] = useState(new Set<number>());
   const selectedCellsRef = useRef<Set<string>>(new Set());
   const isSelectingRef = useRef(false);
   const selectionAnchorRef = useRef<string | null>(null);
@@ -836,17 +849,29 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     return roots;
   }, [elements]);
 
+  const toggleCollapse = useCallback((nodeId: number) => {
+    setCollapsedNodes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId);
+      } else {
+        newSet.add(nodeId);
+      }
+      return newSet;
+    });
+  }, []);
+
   const flattenedTree = useMemo(() => {
     const flat: { node: TreeNode, level: number }[] = [];
     const traverse = (nodes: TreeNode[], level: number) => {
       for (const node of nodes) {
         flat.push({ node, level });
-        if (node.children) traverse(node.children, level + 1);
+        if (node.children && !collapsedNodes.has(node.wbsElementId)) traverse(node.children, level + 1);
       }
     };
     traverse(tree, 0);
     return flat;
-  }, [tree]);
+  }, [tree, collapsedNodes]);
 
   const { activityRowIds, columnKeys } = useMemo(() => {
     const rowIdTuples: { wbsId: number, userId: number }[] = [];
@@ -866,7 +891,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
             rowIdTuples.push({ wbsId: node.wbsElementId, userId });
           });
         }
-        if (node.children) traverse(node.children);
+        if (node.children && !collapsedNodes.has(node.wbsElementId)) traverse(node.children);
       }
     };
     traverse(tree);
@@ -874,7 +899,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
       activityRowIds: rowIdTuples,
       columnKeys: columns.map(c => c.key)
     };
-  }, [tree, columns, assignedUsers, executionData]);
+  }, [tree, columns, assignedUsers, executionData, collapsedNodes]);
 
   const handlePvChange = useEvent(async (wbsElementId: number, userId: number, date: string, value: number | null) => {
     if (isReadOnly || !planVersionId) return;
@@ -1454,7 +1479,9 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
                     onCellKeyDown={handleCellKeyDown} 
                     onCellPaste={handleCellPaste} 
                     onCellMouseDown={handleCellMouseDown} 
-                    onCellMouseOver={handleCellMouseOver} 
+                    onCellMouseOver={handleCellMouseOver}
+                    isCollapsed={collapsedNodes.has(node.wbsElementId)}
+                    onToggleCollapse={toggleCollapse}
                 />
               )}
             </Table.Tbody>
