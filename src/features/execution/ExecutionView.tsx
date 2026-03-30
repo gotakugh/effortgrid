@@ -1443,7 +1443,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
       {error && <Alert title="Error" color="red" icon={<IconAlertCircle />}>{error}</Alert>}
 
       {!isLoading && !error && (
-        <ScrollArea className={classes.table_container} style={{ '--zoom': zoomLevel } as React.CSSProperties} offsetScrollbars>
+        <Box className={classes.table_container} style={{ overflow: 'auto', '--zoom': zoomLevel } as React.CSSProperties}>
           <Table className={classes.table} withColumnBorders verticalSpacing="0" horizontalSpacing="0">
             <Table.Thead>
               <Table.Tr>
@@ -1487,7 +1487,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
             </Table.Tbody>
             <ResourceCapacityFooter users={users} elements={elements} data={executionData} columns={columns} />
           </Table>
-        </ScrollArea>
+        </Box>
       )}
     </Stack>
   );
