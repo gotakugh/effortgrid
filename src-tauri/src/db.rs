@@ -682,6 +682,42 @@ pub async fn delete_pv_allocation(pool: &SqlitePool, id: i64) -> DbResult<u64> {
     Ok(rows_affected)
 }
 
+pub async fn sync_pv_to_ac_up_to_date(
+    pool: &SqlitePool,
+    plan_version_id: i64,
+    up_to_date: NaiveDate,
+) -> DbResult<()> {
+    let mut tx = pool.begin().await?;
+
+    // 1. 指定日以前のPV割当をすべて削除
+    sqlx::query(
+        "DELETE FROM pv_allocations WHERE plan_version_id = ? AND start_date <= ?"
+    )
+    .bind(plan_version_id)
+    .bind(up_to_date)
+    .execute(&mut *tx)
+    .await?;
+
+    // 2. 指定日以前のAC（実績コスト）を元に、新しいPV割当を一括作成
+    sqlx::query(
+        r#"
+        INSERT INTO pv_allocations (plan_version_id, wbs_element_id, user_id, start_date, end_date, planned_value)
+        SELECT ?, ac.wbs_element_id, ac.user_id, ac.work_date, ac.work_date, ac.actual_cost
+        FROM actual_costs ac
+        JOIN wbs_element_details wed ON ac.wbs_element_id = wed.wbs_element_id
+        WHERE wed.plan_version_id = ? AND ac.work_date <= ? AND ac.is_deleted = false AND wed.is_deleted = false AND wed.element_type = 'Activity'
+        "#
+    )
+    .bind(plan_version_id)
+    .bind(plan_version_id)
+    .bind(up_to_date)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
 pub async fn get_filterable_wbs_nodes(pool: &SqlitePool, plan_version_id: i64) -> DbResult<Vec<WbsElementDetail>> {
     let nodes = sqlx::query_as(
         "SELECT * FROM wbs_element_details WHERE plan_version_id = ? AND element_type IN ('Project', 'WorkPackage') AND is_deleted = false ORDER BY id"

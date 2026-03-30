@@ -5,8 +5,8 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useDisclosure } from '@mantine/hooks';
-import { MonthPickerInput } from '@mantine/dates';
-import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus, IconZoomOut, IconZoomIn, IconClipboardCopy, IconTarget, IconChevronDown, IconChevronsDown, IconChevronsRight } from '@tabler/icons-react';
+import { MonthPickerInput, DatePickerInput } from '@mantine/dates';
+import { IconChevronLeft, IconChevronRight, IconAlertCircle, IconPlus, IconZoomOut, IconZoomIn, IconClipboardCopy, IconTarget, IconChevronDown, IconChevronsDown, IconChevronsRight, IconRefresh } from '@tabler/icons-react';
 import { WbsElementDetail, WbsElementType, PvAllocation, ActualCost, ExecutionData, User } from '../../types';
 import { useUsers } from '../../hooks/useUsers';
 import { ImportWizardModal } from '../../components/ImportWizardModal';
@@ -680,6 +680,9 @@ const GridRow = React.memo(({
 export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
   const { users } = useUsers();
   const [importWizardOpened, { open: openImportWizard, close: closeImportWizard }] = useDisclosure(false);
+  const [syncModalOpened, { open: openSyncModal, close: closeSyncModal }] = useDisclosure(false);
+  const [syncDate, setSyncDate] = useState<Date | null>(new Date());
+  const [isSyncing, setIsSyncing] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     return (sessionStorage.getItem('execution_view_mode') as ViewMode) || 'daily';
   });
@@ -1419,11 +1422,47 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
 
   const changeMonth = (amount: number) => setCurrentMonth(dayjs(currentMonth).add(amount, 'month').toDate());
 
+  const handleSyncPvToAc = async () => {
+    if (!planVersionId || !syncDate) return;
+    setIsSyncing(true);
+    try {
+      await invoke('sync_pv_to_ac', {
+        payload: { planVersionId, upToDate: dayjs(syncDate).format('YYYY-MM-DD') }
+      });
+      notifications.show({ title: 'Sync Successful', message: 'PVs have been updated to match ACs up to the selected date.', color: 'green' });
+      closeSyncModal();
+      fetchAllData();
+    } catch (err: any) {
+      console.error("Sync failed:", err);
+      notifications.show({ title: 'Sync Failed', message: typeof err === 'string' ? err : 'An unknown error occurred.', color: 'red' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   if (isReadOnly) return <Alert color="orange" title="Read-only Mode" icon={<IconAlertCircle />}>You are viewing a historical baseline. To record actuals or progress, please select the "Working Draft" from the header.</Alert>;
   if (!planVersionId) return <Text c="dimmed" ta="center" pt="xl">Please select a project to start tracking execution.</Text>;
 
   return (
     <Stack h="calc(100vh - 90px)">
+      <Modal opened={syncModalOpened} onClose={closeSyncModal} title="Sync PV to AC (Re-baseline Support)">
+        <Stack>
+          <Alert color="blue" icon={<IconAlertCircle />}>
+            This will permanently replace all PV (Planned Value) allocations up to the selected date with the actual recorded AC (Actual Cost) values. Use this to reset past deviations before saving a new baseline.
+          </Alert>
+          <DatePickerInput
+            label="Sync up to date"
+            description="All PVs on or before this date will be overwritten by ACs."
+            value={syncDate}
+            onChange={setSyncDate}
+            withAsterisk
+          />
+          <Group justify="flex-end" mt="md">
+            <Button variant="default" onClick={closeSyncModal}>Cancel</Button>
+            <Button color="red" onClick={handleSyncPvToAc} loading={isSyncing} disabled={!syncDate}>Sync PV to AC</Button>
+          </Group>
+        </Stack>
+      </Modal>
       <ImportWizardModal
         opened={importWizardOpened}
         onClose={closeImportWizard}
@@ -1437,7 +1476,8 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
             {!isReadOnly && (
               <>
                 <Button size="xs" variant="default" onClick={handleCopyTsv} leftSection={<IconClipboardCopy size={14} />}>Copy TSV</Button>
-                <Button size="xs" variant="default" onClick={openImportWizard}>Import Data</Button>
+                <Button size="xs" variant="default" onClick={openImportWizard}>Import</Button>
+                <Button size="xs" variant="light" color="orange" onClick={openSyncModal} leftSection={<IconRefresh size={14} />}>Sync PV to AC</Button>
               </>
             )}
         </Group>

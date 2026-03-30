@@ -117,6 +117,13 @@ pub struct ListAllocationsForPeriodPayload {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SyncPvToAcPayload {
+    pub plan_version_id: i64,
+    pub up_to_date: NaiveDate,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpsertDailyAllocationPayload {
     plan_version_id: i64,
     wbs_element_id: i64,
@@ -563,6 +570,17 @@ pub async fn delete_pv_allocation(state: State<'_, crate::db::AppState>, id: i64
     let pool_guard = state.pool.read().await;
     let pool = pool_guard.as_ref().ok_or_else(|| AppError::DbError("No database is currently open".to_string()))?;
     db::delete_pv_allocation(pool, id).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn sync_pv_to_ac(
+    state: State<'_, crate::db::AppState>,
+    payload: SyncPvToAcPayload,
+) -> AppResult<()> {
+    let pool_guard = state.pool.read().await;
+    let pool = pool_guard.as_ref().ok_or_else(|| AppError::DbError("No database is currently open".to_string()))?;
+    db::sync_pv_to_ac_up_to_date(pool, payload.plan_version_id, payload.up_to_date).await?;
     Ok(())
 }
 

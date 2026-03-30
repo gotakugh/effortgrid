@@ -57,6 +57,7 @@ pub fn run() {
             commands::add_pv_allocation,
             commands::update_pv_allocation,
             commands::delete_pv_allocation,
+            commands::sync_pv_to_ac,
             commands::list_all_allocations_for_plan_version,
             commands::list_all_actuals_for_plan_version,
             commands::list_allocations_for_period,
