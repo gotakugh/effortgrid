@@ -1454,7 +1454,7 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
             label="Sync up to date"
             description="All PVs on or before this date will be overwritten by ACs."
             value={syncDate}
-            onChange={setSyncDate}
+            onChange={(val: any) => setSyncDate(val ? new Date(val) : null)}
             withAsterisk
           />
           <Group justify="flex-end" mt="md">
