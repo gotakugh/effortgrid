@@ -95,7 +95,7 @@
     text-align: center;
     font-size: var(--mantine-font-size-xs);
     color: var(--mantine-color-dimmed);
-    background-color: var(--mantine-color-dark-8) !important;
+    background-color: var(--mantine-color-body) !important;
     position: sticky !important;
     left: calc(350px * var(--zoom-factor));
     z-index: 10;
@@ -108,7 +108,7 @@
     min-width: calc(5rem * var(--zoom-factor));
     max-width: calc(5rem * var(--zoom-factor));
     text-align: right;
-    background-color: var(--mantine-color-dark-8) !important;
+    background-color: var(--mantine-color-body) !important;
     position: sticky !important;
     left: calc((350px + 4rem) * var(--zoom-factor));
     z-index: 10;
@@ -155,7 +155,6 @@
 }
 
 .readonly_cell {
-    background-color: var(--mantine-color-dark-8);
     color: var(--mantine-color-dimmed);
 }
 
