@@ -76,7 +76,7 @@ const ProgressInputCell = React.memo(({ wbsElementId, date, initialValue, onComm
       <input
         type="number"
         className={classes.ac_input_native}
-        style={{ paddingRight: '16px', cursor: 'cell', color: value !== '' ? 'var(--mantine-color-teal-4)' : undefined }}
+        style={{ paddingRight: 'calc(16px * var(--zoom-factor))', cursor: 'cell', color: value !== '' ? 'var(--mantine-color-teal-4)' : undefined }}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onBlur={handleBlur}
@@ -84,7 +84,7 @@ const ProgressInputCell = React.memo(({ wbsElementId, date, initialValue, onComm
         readOnly={isReadOnly}
       />
       {value !== '' && (
-        <span style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: 'var(--mantine-color-teal-4)', pointerEvents: 'none' }}>%</span>
+        <span style={{ position: 'absolute', right: 'calc(3px * var(--zoom-factor))', top: '50%', transform: 'translateY(-50%)', fontSize: 'calc(10px * var(--zoom-factor))', color: 'var(--mantine-color-teal-4)', pointerEvents: 'none' }}>%</span>
       )}
     </div>
   );
