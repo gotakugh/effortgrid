@@ -372,6 +372,11 @@ const GridRow = React.memo(({
     }, 0);
   };
 
+  const nodeEstimatedPv = useMemo(() => {
+    if (isActivity) return node.estimatedPv || 0;
+    return activityDescendants.reduce((sum, act) => sum + (act.estimatedPv || 0), 0);
+  }, [isActivity, node.estimatedPv, activityDescendants]);
+
   const { nodeTotalAllocated, nodeTotalActuals } = useMemo(() => {
     const activityIds = activityDescendants.map(a => a.wbsElementId);
     const totalAllocated = allPlanAllocations
@@ -441,9 +446,18 @@ const GridRow = React.memo(({
   const availableUsers = useMemo(() => users.filter(u => !assignedUsers.has(u.id)), [users, assignedUsers]);
 
   const isLastRowOfItem = !isActivity || usersToRender.length === 0;
-  const itemBorderBottom = '2px solid var(--mantine-color-dark-3)';
-  const normalBorderBottom = '1px solid var(--mantine-color-dark-4)';
-  const progressBorderBottom = isLastRowOfItem ? itemBorderBottom : normalBorderBottom;
+  
+  // 境界線のメリハリ定義
+  const itemBorderBottom = '3px solid var(--mantine-color-dark-3)'; // アイテム同士の区切り（一番太い）
+  const userBorderBottom = '2px solid var(--mantine-color-dark-4)'; // ユーザー間、WBSとユーザー間の区切り
+  
+  const progressBorderBottom = isLastRowOfItem ? itemBorderBottom : userBorderBottom;
+
+  // PVとEst.PVの差異に応じたカラー設定
+  const totalPvColor = nodeEstimatedPv > 0 
+    ? (nodeTotalAllocated === nodeEstimatedPv ? 'blue.3' : (nodeTotalAllocated > nodeEstimatedPv ? 'red.4' : 'orange.4')) 
+    : 'blue.3';
+  const totalPvWeight = nodeEstimatedPv > 0 && nodeTotalAllocated !== nodeEstimatedPv ? 700 : 400;
 
   return (
     <>
@@ -481,9 +495,11 @@ const GridRow = React.memo(({
         <Table.Td className={`${classes.metric_col} ${classes.readonly_cell}`} style={{ borderBottom: 'none' }}>PV</Table.Td>
         <Table.Td className={`${classes.total_col} ${classes.readonly_cell}`} style={{ borderBottom: 'none' }}>
           <Group gap={2} justify="flex-end" wrap="nowrap">
-            <Text size="sm" c="blue.3">{nodeTotalAllocated > 0 ? nodeTotalAllocated.toFixed(1) : '0.0'}</Text>
-            {node.estimatedPv != null && (
-              <Text size="xs" c="dimmed">/ {node.estimatedPv.toFixed(1)}</Text>
+            <Text size="sm" c={totalPvColor} fw={totalPvWeight}>
+              {nodeTotalAllocated > 0 ? nodeTotalAllocated.toFixed(1) : '0.0'}
+            </Text>
+            {nodeEstimatedPv > 0 && (
+              <Text size="xs" c="dimmed">/ {nodeEstimatedPv.toFixed(1)}</Text>
             )}
           </Group>
         </Table.Td>
@@ -588,7 +604,7 @@ const GridRow = React.memo(({
           <React.Fragment key={userId}>
             {/* User PV Row */}
             <Table.Tr>
-              <Table.Td rowSpan={2} className={classes.wbs_col} style={{ verticalAlign: 'middle', borderBottom: isLastUser ? itemBorderBottom : 'none' }}>
+              <Table.Td rowSpan={2} className={classes.wbs_col} style={{ verticalAlign: 'middle', borderBottom: isLastUser ? itemBorderBottom : userBorderBottom }}>
                 <Group gap="xs" style={{ paddingLeft: (level * 20) + 30 }}>
                   <Avatar size="sm" color={isUnassigned ? 'gray' : 'blue'}>{isUnassigned ? '?' : user?.name.substring(0,2)}</Avatar>
                   <Text size="xs">{isUnassigned ? 'Unassigned' : user?.name}</Text>
@@ -634,8 +650,8 @@ const GridRow = React.memo(({
             </Table.Tr>
             {/* User AC Row */}
             <Table.Tr>
-              <Table.Td className={`${classes.metric_col} ${classes.readonly_cell}`} style={{ borderTop: 'none', borderBottom: isLastUser ? itemBorderBottom : normalBorderBottom }}>AC</Table.Td>
-              <Table.Td className={classes.total_col} style={{ textAlign: 'right', verticalAlign: 'middle', borderTop: 'none', borderBottom: isLastUser ? itemBorderBottom : normalBorderBottom }}>
+              <Table.Td className={`${classes.metric_col} ${classes.readonly_cell}`} style={{ borderTop: 'none', borderBottom: isLastUser ? itemBorderBottom : userBorderBottom }}>AC</Table.Td>
+              <Table.Td className={classes.total_col} style={{ textAlign: 'right', verticalAlign: 'middle', borderTop: 'none', borderBottom: isLastUser ? itemBorderBottom : userBorderBottom }}>
                 <Text
                   size="sm"
                   fw={500}
@@ -660,7 +676,7 @@ const GridRow = React.memo(({
                     : col.dates.reduce((sum, d) => sum + (data[node.wbsElementId]?.[userId]?.[d.format('YYYY-MM-DD')]?.ac?.value || 0), 0);
 
                 return (
-                  <Table.Td key={`${dateStr}-ac`} className={`${classes.data_cell} ${ganttClassesAc.join(' ')}`} style={{ padding: 0, borderTop: 'none', textAlign: 'right', verticalAlign: 'middle', borderBottom: isLastUser ? itemBorderBottom : normalBorderBottom }}>
+                  <Table.Td key={`${dateStr}-ac`} className={`${classes.data_cell} ${ganttClassesAc.join(' ')}`} style={{ padding: 0, borderTop: 'none', textAlign: 'right', verticalAlign: 'middle', borderBottom: isLastUser ? itemBorderBottom : userBorderBottom }}>
                     {col.type === 'day' ? (
                       <AcInputCell
                         wbsElementId={node.wbsElementId} userId={userId} date={dateStr}
