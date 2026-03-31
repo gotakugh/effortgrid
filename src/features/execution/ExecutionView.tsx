@@ -761,8 +761,8 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     let end;
     
     if (viewMode === 'daily') {
-      // Dailyモード: 開始月から2ヶ月分（末日まで）表示
-      end = start.add(2, 'month').subtract(1, 'day');
+      // Dailyモード: 従来どおり1ヶ月分（月末まで）表示
+      end = start.endOf('month');
     } else {
       // Weeklyモード: 月曜始まりで26週間（約半年）表示
       start = start.startOf('isoWeek');
@@ -1534,7 +1534,14 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
               ]}
             />
           <ActionIcon onClick={() => changeMonth(-1)} variant="default" aria-label="Previous month"><IconChevronLeft size={16} /></ActionIcon>
-          <MonthPickerInput value={currentMonth} onChange={(date) => date && setCurrentMonth(new Date(date))} style={{ width: 150 }} />
+          <MonthPickerInput 
+            value={currentMonth} 
+            onChange={(date) => date && setCurrentMonth(new Date(date))} 
+            valueFormat="YYYY / MM"
+            popoverProps={{ withinPortal: true }}
+            styles={{ input: { textAlign: 'center', fontWeight: 600, cursor: 'pointer' } }}
+            style={{ width: 120 }} 
+          />
           <ActionIcon onClick={() => changeMonth(1)} variant="default" aria-label="Next month"><IconChevronRight size={16} /></ActionIcon>
         </Group>
       </Group>
