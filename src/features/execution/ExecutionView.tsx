@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { ask } from '@tauri-apps/plugin-dialog';
 import {
   Group, Title, Text, Table, NumberInput, Badge, Box, Loader, Center, Alert, Stack, ActionIcon, Menu, Avatar, Tooltip, rem, SegmentedControl, Button, ScrollArea, Modal,
 } from '@mantine/core';
