@@ -88,7 +88,11 @@ const ProgressInputCell = React.memo(({ wbsElementId, date, initialValue, onComm
             e.preventDefault();
             handleBlur(); // 確定するがフォーカスはそのまま
           }
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault(); // デフォルトの数値増減を防止
+          }
         }}
+        onWheel={(e) => e.currentTarget.blur()} // マウスホイールでの増減を防止
         step="0.1" min="0" max="100"
         readOnly={isReadOnly}
       />
@@ -132,8 +136,12 @@ const PvInputCell = React.memo(({ wbsElementId, userId, date, initialPv, onCommi
           e.preventDefault();
           handleBlur(); // 確定するがフォーカスはそのまま
         }
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault(); // デフォルトの数値増減を防止
+        }
         onKeyDown(e as any, wbsElementId, userId, date, 'pv');
       }}
+      onWheel={(e) => e.currentTarget.blur()} // マウスホイールでの増減を防止
       onPaste={(e) => onPaste(e as any, wbsElementId, userId, date, 'pv')}
       onMouseDown={(e) => onMouseDown(e as any, wbsElementId, userId, date, 'pv')}
       onMouseOver={() => onMouseOver(wbsElementId, userId, date, 'pv')}
@@ -176,8 +184,12 @@ const AcInputCell = React.memo(({ wbsElementId, userId, date, initialAc, onCommi
           e.preventDefault();
           handleBlur(); // 確定するがフォーカスはそのまま
         }
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault(); // デフォルトの数値増減を防止
+        }
         onKeyDown(e as any, wbsElementId, userId, date, 'ac');
       }}
+      onWheel={(e) => e.currentTarget.blur()} // マウスホイールでの増減を防止
       onPaste={(e) => onPaste(e as any, wbsElementId, userId, date, 'ac')}
       onMouseDown={(e) => onMouseDown(e as any, wbsElementId, userId, date, 'ac')}
       onMouseOver={() => onMouseOver(wbsElementId, userId, date, 'ac')}
