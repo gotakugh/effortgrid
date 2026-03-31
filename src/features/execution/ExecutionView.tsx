@@ -726,6 +726,14 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
   const [syncModalOpened, { open: openSyncModal, close: closeSyncModal }] = useDisclosure(false);
   const [syncDate, setSyncDate] = useState<Date | null>(new Date());
   const [isSyncing, setIsSyncing] = useState(false);
+  const [pendingWeeklyConsolidation, setPendingWeeklyConsolidation] = useState<{
+    wbsElementId: number;
+    userId: number;
+    weekKey: string;
+    value: number | null;
+    metricType: 'pv' | 'ac';
+    targetDateStr: string;
+  } | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     return (sessionStorage.getItem('execution_view_mode') as ViewMode) || 'daily';
   });
@@ -1099,6 +1107,107 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
       catch (err) { console.error("Weekly AC update failed:", err); fetchAllData(); }
     }
   });
+
+  const executeWeeklyChange = async (wbsElementId: number, userId: number, weekKey: string, value: number | null, metricType: 'pv' | 'ac', targetDateStr: string) => {
+    const weekCol = columns.find(c => c.key === weekKey) as WeekColumn | undefined;
+    if (!weekCol || weekCol.type !== 'week' || !planVersionId) return;
+
+    if (metricType === 'pv') {
+      const allocations = weekCol.dates.map(d => {
+        const dateStr = d.format('YYYY-MM-DD');
+        return {
+          wbsElementId,
+          userId: userId === 0 ? null : userId,
+          date: dateStr,
+          plannedValue: dateStr === targetDateStr ? value : null
+        };
+      });
+      
+      setExecutionData(prev => {
+          const newData = JSON.parse(JSON.stringify(prev));
+          allocations.forEach(item => {
+              const uId = item.userId ?? 0;
+              const ensurePath = (wbsId: number, uId: number, d: string) => { if (!newData[wbsId]) newData[wbsId] = {}; if (!newData[wbsId][uId]) newData[wbsId][uId] = {}; if (!newData[wbsId][uId][d]) newData[wbsId][uId][d] = {}; };
+              ensurePath(item.wbsElementId, uId, item.date);
+              if (item.plannedValue !== null && item.plannedValue > 0) { newData[item.wbsElementId][uId][item.date].pv = item.plannedValue; }
+              else { if (newData[item.wbsElementId]?.[uId]?.[item.date]?.pv) { delete newData[item.wbsElementId][uId][item.date].pv; }}
+          });
+          return newData;
+      });
+
+      try {
+        await invoke('upsert_daily_allocations_bulk', { payload: { planVersionId, allocations } });
+        const newAllocs = await invoke<PvAllocation[]>('list_all_allocations_for_plan_version', { planVersionId });
+        setAllPlanAllocations(newAllocs);
+      } catch (err) { console.error("Weekly PV update failed:", err); fetchAllData(); }
+    } else {
+      if (userId === 0) return;
+      const costs = weekCol.dates.map(d => {
+        const dateStr = d.format('YYYY-MM-DD');
+        return {
+          wbsElementId,
+          userId: userId,
+          workDate: dateStr,
+          actualCost: dateStr === targetDateStr ? value : null
+        };
+      });
+
+      setExecutionData(prev => {
+          const newData = JSON.parse(JSON.stringify(prev));
+          costs.forEach(item => {
+              const ensurePath = (wbsId: number, uId: number, d: string) => { if (!newData[wbsId]) newData[wbsId] = {}; if (!newData[wbsId][uId]) newData[wbsId][uId] = {}; if (!newData[wbsId][uId][d]) newData[wbsId][uId][d] = {}; };
+              ensurePath(item.wbsElementId, item.userId, item.workDate);
+              if(item.actualCost !== null && item.actualCost > 0) { newData[item.wbsElementId][item.userId][item.workDate].ac = { id: -1, value: item.actualCost }; } 
+              else { if(newData[item.wbsElementId]?.[item.userId]?.[item.workDate]?.ac) { delete newData[item.wbsElementId][item.userId][item.workDate].ac; } }
+          });
+          return newData;
+      });
+
+      try { await invoke('upsert_actual_costs_bulk', { payload: { costs } }); fetchAllData(); } 
+      catch (err) { console.error("Weekly AC update failed:", err); fetchAllData(); }
+    }
+  };
+
+  const handleWeeklyChange = useEvent(async (wbsElementId: number, userId: number, weekKey: string, value: number | null, metricType: 'pv' | 'ac') => {
+    if (isReadOnly || !planVersionId) return;
+
+    const weekCol = columns.find(c => c.key === weekKey) as WeekColumn | undefined;
+    if (!weekCol || weekCol.type !== 'week') return;
+
+    const targetDateStr = metricType === 'pv' 
+      ? weekCol.dates[0].format('YYYY-MM-DD') 
+      : weekCol.dates[weekCol.dates.length - 1].format('YYYY-MM-DD');
+
+    const existingEntries = executionData[wbsElementId]?.[userId] || {};
+    let hasOtherDaysData = false;
+    
+    weekCol.dates.forEach(d => {
+      const dateStr = d.format('YYYY-MM-DD');
+      if (dateStr !== targetDateStr) {
+        if (metricType === 'pv' && existingEntries[dateStr]?.pv) hasOtherDaysData = true;
+        if (metricType === 'ac' && existingEntries[dateStr]?.ac) hasOtherDaysData = true;
+      }
+    });
+
+    if (hasOtherDaysData && value !== null) {
+      setPendingWeeklyConsolidation({ wbsElementId, userId, weekKey, value, metricType, targetDateStr });
+      return;
+    }
+
+    await executeWeeklyChange(wbsElementId, userId, weekKey, value, metricType, targetDateStr);
+  });
+
+  const confirmWeeklyConsolidation = async () => {
+    if (!pendingWeeklyConsolidation) return;
+    const { wbsElementId, userId, weekKey, value, metricType, targetDateStr } = pendingWeeklyConsolidation;
+    setPendingWeeklyConsolidation(null);
+    await executeWeeklyChange(wbsElementId, userId, weekKey, value, metricType, targetDateStr);
+  };
+
+  const cancelWeeklyConsolidation = () => {
+    setPendingWeeklyConsolidation(null);
+    fetchAllData();
+  };
 
   const handleAcChange = useEvent(async (wbsElementId: number, userId: number, date: string, value: number | null) => {
     if (isReadOnly) return;
@@ -1604,6 +1713,18 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
           </Group>
         </Stack>
       </Modal>
+
+      <Modal opened={!!pendingWeeklyConsolidation} onClose={cancelWeeklyConsolidation} title={<Group gap="xs"><IconAlertCircle color="var(--mantine-color-orange-5)" /><Text fw={500}>Confirm Consolidation</Text></Group>} centered>
+        <Text size="sm" mb="lg">
+          There are existing {pendingWeeklyConsolidation?.metricType.toUpperCase()} values on other days in this week.
+          Do you want to overwrite and consolidate them to {pendingWeeklyConsolidation?.metricType === 'pv' ? 'Monday' : 'Sunday'} ({pendingWeeklyConsolidation?.targetDateStr})?
+        </Text>
+        <Group justify="flex-end" mt="md">
+          <Button variant="default" onClick={cancelWeeklyConsolidation}>Cancel</Button>
+          <Button color="blue" onClick={confirmWeeklyConsolidation}>Confirm</Button>
+        </Group>
+      </Modal>
+
       <ImportWizardModal
         opened={importWizardOpened}
         onClose={closeImportWizard}
