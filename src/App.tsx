@@ -38,6 +38,86 @@ const createBaselineSchema = z.object({
   name: z.string().min(1, { message: 'Baseline name is required' }),
 });
 
+function CreatePortfolioModal({ opened, onClose, onSuccess }: { opened: boolean, onClose: () => void, onSuccess: () => Promise<any> }) {
+  const form = useForm({
+    initialValues: { name: '' },
+    validate: zodResolver(createPortfolioSchema as any),
+  });
+
+  const handleSubmit = async (values: { name: string }) => {
+    try {
+      await invoke('create_portfolio', { name: values.name });
+      form.reset();
+      onClose();
+      await onSuccess();
+    } catch (error) {
+      console.error('Failed to create portfolio:', error);
+    }
+  };
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="Create New Portfolio">
+      <form onSubmit={form.onSubmit(handleSubmit)}>
+        <Stack>
+          <TextInput
+            withAsterisk
+            label="Portfolio Name"
+            placeholder="e.g., My Awesome Portfolio"
+            {...form.getInputProps('name')}
+            data-autofocus
+          />
+          <Group justify="flex-end" mt="md">
+            <Button type="submit">Create Portfolio</Button>
+          </Group>
+        </Stack>
+      </form>
+    </Modal>
+  );
+}
+
+function CreateBaselineModal({ opened, onClose, onSuccess, portfolioId }: { opened: boolean, onClose: () => void, onSuccess: () => Promise<void>, portfolioId: string | null }) {
+  const form = useForm({
+    initialValues: { name: '' },
+    validate: zodResolver(createBaselineSchema as any),
+  });
+
+  const handleSubmit = async (values: { name: string }) => {
+    if (!portfolioId) return;
+    try {
+      await invoke('create_baseline', {
+        payload: {
+          portfolioId: Number(portfolioId),
+          baselineName: values.name,
+        },
+      });
+      form.reset();
+      onClose();
+      await onSuccess();
+    } catch (error) {
+      console.error('Failed to create baseline:', error);
+    }
+  };
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="Save New Baseline">
+      <form onSubmit={form.onSubmit(handleSubmit)}>
+        <Stack>
+          <TextInput
+            withAsterisk
+            label="Baseline Name"
+            placeholder='e.g., "V1.0 - Initial Plan"'
+            {...form.getInputProps('name')}
+            data-autofocus
+          />
+          <Group justify="flex-end" mt="md">
+            <Button type="submit">Save Baseline</Button>
+          </Group>
+        </Stack>
+      </form>
+    </Modal>
+  );
+}
+
 function App() {
   const [activeView, setActiveView] = useState('dashboard');
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
@@ -182,44 +262,6 @@ function App() {
   );
   const isReadOnly = useMemo(() => (selectedPlanVersion ? !selectedPlanVersion.isDraft : true), [selectedPlanVersion]);
 
-  const portfolioForm = useForm({
-    initialValues: { name: '' },
-    validate: zodResolver(createPortfolioSchema as any),
-  });
-
-  const baselineForm = useForm({
-    initialValues: { name: '' },
-    validate: zodResolver(createBaselineSchema as any),
-  });
-
-  const handleCreatePortfolio = async (values: { name: string }) => {
-    try {
-      await invoke('create_portfolio', { name: values.name });
-      closeCreateModal();
-      portfolioForm.reset();
-      await fetchPortfolios(); // Refresh portfolio list
-    } catch (error) {
-      console.error('Failed to create portfolio:', error);
-    }
-  };
-
-  const handleCreateBaseline = async (values: { name: string }) => {
-    if (!selectedPortfolioId) return;
-    try {
-      await invoke('create_baseline', {
-        payload: {
-          portfolioId: Number(selectedPortfolioId),
-          baselineName: values.name,
-        },
-      });
-      closeBaselineModal();
-      baselineForm.reset();
-      await fetchPlanVersions(Number(selectedPortfolioId)); // Refresh plan versions
-    } catch (error) {
-      console.error('Failed to create baseline:', error);
-    }
-  };
-
   const portfolioSelectData = portfolios.map((p) => ({ value: String(p.id), label: p.name }));
   const planVersionSelectData = planVersions.map((v) => ({
     value: String(v.id),
@@ -260,37 +302,17 @@ function App() {
   return (
     <>
       <Notifications />
-      <Modal opened={createModalOpened} onClose={closeCreateModal} title="Create New Portfolio">
-        <form onSubmit={portfolioForm.onSubmit(handleCreatePortfolio)}>
-          <Stack>
-            <TextInput
-              withAsterisk
-              label="Portfolio Name"
-              placeholder="e.g., My Awesome Portfolio"
-              {...portfolioForm.getInputProps('name')}
-            />
-            <Group justify="flex-end" mt="md">
-              <Button type="submit">Create Portfolio</Button>
-            </Group>
-          </Stack>
-        </form>
-      </Modal>
-
-      <Modal opened={baselineModalOpened} onClose={closeBaselineModal} title="Save New Baseline">
-        <form onSubmit={baselineForm.onSubmit(handleCreateBaseline)}>
-          <Stack>
-            <TextInput
-              withAsterisk
-              label="Baseline Name"
-              placeholder='e.g., "V1.0 - Initial Plan"'
-              {...baselineForm.getInputProps('name')}
-            />
-            <Group justify="flex-end" mt="md">
-              <Button type="submit">Save Baseline</Button>
-            </Group>
-          </Stack>
-        </form>
-      </Modal>
+      <CreatePortfolioModal 
+        opened={createModalOpened} 
+        onClose={closeCreateModal} 
+        onSuccess={fetchPortfolios} 
+      />
+      <CreateBaselineModal 
+        opened={baselineModalOpened} 
+        onClose={closeBaselineModal} 
+        onSuccess={() => fetchPlanVersions(Number(selectedPortfolioId))} 
+        portfolioId={selectedPortfolioId} 
+      />
 
       <AppShell
         header={{ height: 60 }}
