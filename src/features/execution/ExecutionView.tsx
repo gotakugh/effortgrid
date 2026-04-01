@@ -1640,11 +1640,15 @@ export function ExecutionView({ planVersionId, isReadOnly }: GridProps) {
     }
   };
 
-  if (isReadOnly) return <Alert color="orange" title="Read-only Mode" icon={<IconAlertCircle />}>You are viewing a historical baseline. To record actuals or progress, please select the "Working Draft" from the header.</Alert>;
   if (!planVersionId) return <Text c="dimmed" ta="center" pt="xl">Please select a project to start tracking execution.</Text>;
 
   return (
     <Stack h="calc(100vh - 90px)">
+      {isReadOnly && (
+        <Alert color="orange" title="Read-only Mode" icon={<IconAlertCircle />} mb="sm">
+          You are viewing a historical baseline. To record actuals or progress, please select the "Working Draft" from the header.
+        </Alert>
+      )}
       <Modal opened={syncModalOpened} onClose={closeSyncModal} title="Sync PV to AC (Re-baseline Support)">
         <Stack>
           <Alert color="blue" icon={<IconAlertCircle />}>
