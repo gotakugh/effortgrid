@@ -11,6 +11,8 @@ pub enum DbError {
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]
     Migration(#[from] sqlx::migrate::MigrateError),
+    #[error("{0}")]
+    Constraint(String),
 }
 
 // データベース操作用のカスタムResult型
@@ -163,6 +165,20 @@ pub struct ProgressUpdateBulkItem {
 
 // ----- DB Access Functions -----
 
+async fn ensure_plan_is_draft<'e, E>(executor: E, plan_version_id: i64) -> DbResult<()>
+where
+    E: Executor<'e, Database = Sqlite>,
+{
+    let is_draft: bool = sqlx::query_scalar("SELECT is_draft FROM plan_versions WHERE id = ?")
+        .bind(plan_version_id)
+        .fetch_one(executor)
+        .await?;
+    if !is_draft {
+        return Err(DbError::Constraint("Cannot modify a saved baseline.".to_string()));
+    }
+    Ok(())
+}
+
 /// 新規ポートフォリオを作成し、初期ドラフト版の計画バージョンも併せて作成します。
 pub async fn create_portfolio(pool: &SqlitePool, name: &str) -> DbResult<(Portfolio, PlanVersion)> {
     let mut tx = pool.begin().await?;
@@ -214,6 +230,7 @@ pub async fn add_wbs_element(
     estimated_pv: Option<f64>,
     tags: Option<&str>,
 ) -> DbResult<WbsElementDetail> {
+    ensure_plan_is_draft(pool, plan_version_id).await?;
     let mut tx = pool.begin().await?;
 
     // 1. plan_versionからportfolio_idを取得
@@ -303,6 +320,8 @@ pub async fn update_wbs_element_pv(
     id: i64, // This is wbs_element_details.id
     estimated_pv: Option<f64>,
 ) -> DbResult<u64> {
+    let (plan_version_id,): (i64,) = sqlx::query_as("SELECT plan_version_id FROM wbs_element_details WHERE id = ?").bind(id).fetch_one(pool).await?;
+    ensure_plan_is_draft(pool, plan_version_id).await?;
     let rows_affected = sqlx::query("UPDATE wbs_element_details SET estimated_pv = ? WHERE id = ?")
         .bind(estimated_pv)
         .bind(id)
@@ -322,6 +341,8 @@ pub async fn update_wbs_element_details(
     tags: Option<&str>,
     milestone_id: Option<i64>,
 ) -> DbResult<u64> {
+    let (plan_version_id,): (i64,) = sqlx::query_as("SELECT plan_version_id FROM wbs_element_details WHERE id = ?").bind(id).fetch_one(pool).await?;
+    ensure_plan_is_draft(pool, plan_version_id).await?;
     let rows_affected = sqlx::query(
         "UPDATE wbs_element_details SET title = ?, description = ?, element_type = ?, tags = ?, milestone_id = ? WHERE id = ?"
     )
@@ -342,6 +363,7 @@ pub async fn delete_wbs_elements_bulk(
     plan_version_id: i64,
     detail_ids: &[i64],
 ) -> DbResult<u64> {
+    ensure_plan_is_draft(pool, plan_version_id).await?;
     let ids_json = serde_json::to_string(detail_ids).unwrap();
 
     let rows_affected = sqlx::query(r#"
